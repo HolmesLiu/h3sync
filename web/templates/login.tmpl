@@ -1,0 +1,16 @@
+﻿<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>h3sync login</title>
+</head>
+<body>
+  <h1>h3sync 管理后台登录</h1>
+  {{if .error}}<p style="color:red">{{.error}}</p>{{end}}
+  <form method="post" action="/admin/login">
+    <label>用户名: <input name="username" /></label><br />
+    <label>密码: <input type="password" name="password" /></label><br />
+    <button type="submit">登录</button>
+  </form>
+</body>
+</html>

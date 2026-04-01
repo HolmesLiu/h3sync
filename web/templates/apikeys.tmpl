@@ -1,0 +1,16 @@
+﻿<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>h3sync apikeys</title></head>
+<body>
+  <h1>API Key 管理</h1>
+  <p><a href="/admin">返回控制台</a></p>
+  {{if .createdKey}}<p><strong>新密钥（仅显示一次）:</strong> {{.createdKey}}</p>{{end}}
+  <form method="post" action="/admin/apikeys">
+    <input name="name" placeholder="名称" required />
+    <input name="remark" placeholder="备注" />
+    <input name="expires_at" placeholder="过期日期 YYYY-MM-DD" />
+    <input name="schema_codes" placeholder="授权表单 schemaCode,逗号分隔" />
+    <button type="submit">生成</button>
+  </form>
+</body>
+</html>
