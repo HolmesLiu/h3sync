@@ -1,4 +1,4 @@
-package h3
+﻿package h3
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -21,9 +22,7 @@ func NewClient(baseURL, engineCode, engineSecret string, timeout time.Duration) 
 		baseURL:      baseURL,
 		engineCode:   engineCode,
 		engineSecret: engineSecret,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		httpClient: &http.Client{Timeout: timeout},
 	}
 }
 
@@ -37,6 +36,13 @@ type BizObject struct {
 	ObjectID     string                 `json:"ObjectId"`
 	ModifiedTime *time.Time             `json:"ModifiedTime"`
 	Data         map[string]interface{} `json:"-"`
+}
+
+type openAPIResponse struct {
+	Successful   bool                   `json:"Successful"`
+	ErrorMessage string                 `json:"ErrorMessage"`
+	ReturnData   map[string]interface{} `json:"ReturnData"`
+	Data         interface{}            `json:"Data"`
 }
 
 func (c *Client) invoke(ctx context.Context, actionName string, payload map[string]interface{}) (map[string]interface{}, error) {
@@ -64,11 +70,29 @@ func (c *Client) invoke(ctx context.Context, actionName string, payload map[stri
 		return nil, fmt.Errorf("h3 api status: %d", resp.StatusCode)
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var r openAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	if !r.Successful {
+		if strings.TrimSpace(r.ErrorMessage) == "" {
+			return nil, fmt.Errorf("h3 action %s failed", actionName)
+		}
+		return nil, fmt.Errorf("h3 action %s failed: %s", actionName, r.ErrorMessage)
+	}
+
+	if r.ReturnData != nil {
+		return r.ReturnData, nil
+	}
+
+	if r.Data != nil {
+		if m, ok := r.Data.(map[string]interface{}); ok {
+			return m, nil
+		}
+	}
+
+	return map[string]interface{}{}, nil
 }
 
 func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, size int, modifiedAfter *time.Time) ([]BizObject, error) {
@@ -76,13 +100,11 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 	if modifiedAfter != nil {
 		filter = map[string]interface{}{
 			"Matcher": "And",
-			"Conditions": []map[string]interface{}{
-				{
-					"Field":    "ModifiedTime",
-					"Operator": ">",
-					"Value":    modifiedAfter.Format(time.RFC3339),
-				},
-			},
+			"Conditions": []map[string]interface{}{{
+				"Field":    "ModifiedTime",
+				"Operator": ">",
+				"Value":    modifiedAfter.Format(time.RFC3339),
+			}},
 		}
 	}
 	payload := map[string]interface{}{
@@ -96,7 +118,7 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 		return nil, err
 	}
 
-	raw, _ := res["Data"].([]interface{})
+	raw := pickArray(res, "Data", "BizObjects", "Items", "List")
 	items := make([]BizObject, 0, len(raw))
 	for _, x := range raw {
 		m, ok := x.(map[string]interface{})
@@ -104,11 +126,9 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 			continue
 		}
 		obj := BizObject{Data: m}
-		if v, ok := m["ObjectId"].(string); ok {
-			obj.ObjectID = v
-		}
-		if t, ok := m["ModifiedTime"].(string); ok {
-			if parsed, e := time.Parse(time.RFC3339, t); e == nil {
+		obj.ObjectID = firstString(m, "ObjectId", "objectId", "id")
+		if t := firstString(m, "ModifiedTime", "modifiedTime", "modified_time"); t != "" {
+			if parsed, e := parseTime(t); e == nil {
 				obj.ModifiedTime = &parsed
 			}
 		}
@@ -124,7 +144,7 @@ func (c *Client) GetFormFields(ctx context.Context, schemaCode string) ([]FieldM
 		return nil, err
 	}
 
-	list, _ := res["Fields"].([]interface{})
+	list := pickArray(res, "Fields", "PropertyInfos", "FieldInfos")
 	fields := make([]FieldMeta, 0, len(list))
 	for _, x := range list {
 		m, ok := x.(map[string]interface{})
@@ -132,16 +152,42 @@ func (c *Client) GetFormFields(ctx context.Context, schemaCode string) ([]FieldM
 			continue
 		}
 		fields = append(fields, FieldMeta{
-			Code: asString(m["Code"]),
-			Name: asString(m["Name"]),
-			Type: asString(m["Type"]),
+			Code: firstString(m, "Code", "code", "PropertyCode", "propertyCode"),
+			Name: firstString(m, "Name", "name", "PropertyName", "propertyName"),
+			Type: firstString(m, "Type", "type", "PropertyType", "propertyType"),
 		})
 	}
 	return fields, nil
 }
 
-func asString(v interface{}) string {
-	s, _ := v.(string)
-	return s
+func pickArray(m map[string]interface{}, keys ...string) []interface{} {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if arr, ok := v.([]interface{}); ok {
+				return arr
+			}
+		}
+	}
+	return []interface{}{}
 }
 
+func firstString(m map[string]interface{}, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func parseTime(s string) (time.Time, error) {
+	layouts := []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unsupported time format: %s", s)
+}
