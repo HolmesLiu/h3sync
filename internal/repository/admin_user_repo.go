@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"github.com/HolmesLiu/h3sync/internal/models"

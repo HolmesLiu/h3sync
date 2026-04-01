@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"database/sql"
@@ -109,7 +109,7 @@ func (r *FormRepo) EnsureBizTable(schemaCode string, columns []string) error {
 func (r *FormRepo) UpsertBizRow(schemaCode string, objectID string, modifiedTime *time.Time, rawJSON string, fields map[string]string) error {
 	tbl := BizTableName(schemaCode)
 	cols := []string{"object_id", "modified_time", "raw_json", "updated_at"}
-	vals := []any{objectID, modifiedTime, rawJSON, time.Now().UTC()}
+	vals := []interface{}{objectID, modifiedTime, rawJSON, time.Now().UTC()}
 	sets := []string{"modified_time=EXCLUDED.modified_time", "raw_json=EXCLUDED.raw_json", "updated_at=EXCLUDED.updated_at"}
 	i := 5
 	for k, v := range fields {
@@ -136,7 +136,7 @@ func (r *FormRepo) UpsertBizRow(schemaCode string, objectID string, modifiedTime
 	return err
 }
 
-func (r *FormRepo) QueryRows(schemaCode string, whereSQL string, args []any, limit int, offset int) ([]map[string]any, error) {
+func (r *FormRepo) QueryRows(schemaCode string, whereSQL string, args []interface{}, limit int, offset int) ([]map[string]interface{}, error) {
 	tbl := BizTableName(schemaCode)
 	q := fmt.Sprintf("SELECT object_id, modified_time, raw_json FROM %s", tbl)
 	if whereSQL != "" {
@@ -151,9 +151,9 @@ func (r *FormRepo) QueryRows(schemaCode string, whereSQL string, args []any, lim
 	}
 	defer rows.Close()
 
-	result := make([]map[string]any, 0)
+	result := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		m := map[string]any{}
+		m := map[string]interface{}{}
 		if err := rows.MapScan(m); err != nil {
 			return nil, err
 		}
@@ -241,8 +241,8 @@ func (r *FormRepo) CreateAPIKey(name, remark, keyHash, keyPrefix string, expires
 	return id, nil
 }
 
-func normalizeMapScan(m map[string]any) map[string]any {
-	res := map[string]any{}
+func normalizeMapScan(m map[string]interface{}) map[string]interface{} {
+	res := map[string]interface{}{}
 	for k, v := range m {
 		switch tv := v.(type) {
 		case []byte:
@@ -284,3 +284,4 @@ func NullString(v string) sql.NullString {
 	}
 	return sql.NullString{String: v, Valid: true}
 }
+

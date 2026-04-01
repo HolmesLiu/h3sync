@@ -1,4 +1,4 @@
-﻿package openapi
+package openapi
 
 import (
 	"database/sql"
@@ -54,9 +54,10 @@ func (h Handlers) query(c *gin.Context) {
 	}
 
 	rows := 0
-	if list, ok := result["rows"].([]map[string]any); ok {
+	if list, ok := result["rows"].([]map[string]interface{}); ok {
 		rows = len(list)
 	}
 	h.QueryService.AddQueryLog(apiKeyID, schema, req, rows, time.Since(start), c.ClientIP())
 	c.JSON(http.StatusOK, result)
 }
+

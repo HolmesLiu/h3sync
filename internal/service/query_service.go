@@ -1,4 +1,4 @@
-﻿package service
+package service
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ func NewQueryService(formRepo *repository.FormRepo) *QueryService {
 	return &QueryService{formRepo: formRepo}
 }
 
-func (s *QueryService) Query(schemaCode string, req QueryRequest) (map[string]any, error) {
+func (s *QueryService) Query(schemaCode string, req QueryRequest) (map[string]interface{}, error) {
 	form, err := s.formRepo.GetBySchema(schemaCode)
 	if err != nil {
 		return nil, err
@@ -54,8 +54,8 @@ func (s *QueryService) Query(schemaCode string, req QueryRequest) (map[string]an
 		return nil, err
 	}
 
-	return map[string]any{
-		"form": map[string]any{
+	return map[string]interface{}{
+		"form": map[string]interface{}{
 			"schemaCode": form.SchemaCode,
 			"displayName": form.DisplayName,
 			"chineseRemark": form.ChineseRemark,
@@ -77,12 +77,12 @@ func (s *QueryService) AddQueryLog(apiKeyID int64, schemaCode string, req QueryR
 	})
 }
 
-func buildWhere(filters []QueryFilter) (string, []any, error) {
+func buildWhere(filters []QueryFilter) (string, []interface{}, error) {
 	if len(filters) == 0 {
 		return "", nil, nil
 	}
 	parts := make([]string, 0, len(filters))
-	args := make([]any, 0, len(filters)*2)
+	args := make([]interface{}, 0, len(filters)*2)
 	argN := 1
 	for _, f := range filters {
 		if !isSafeIdentifier(f.Field) {
@@ -115,3 +115,4 @@ func isSafeIdentifier(v string) bool {
 	}
 	return true
 }
+

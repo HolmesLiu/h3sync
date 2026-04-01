@@ -1,4 +1,4 @@
-﻿package h3
+package h3
 
 import (
 	"bytes"
@@ -39,8 +39,8 @@ type BizObject struct {
 	Data         map[string]interface{} `json:"-"`
 }
 
-func (c *Client) invoke(ctx context.Context, actionName string, payload map[string]any) (map[string]any, error) {
-	reqBody := map[string]any{
+func (c *Client) invoke(ctx context.Context, actionName string, payload map[string]interface{}) (map[string]interface{}, error) {
+	reqBody := map[string]interface{}{
 		"ActionName":   actionName,
 		"EngineCode":   c.engineCode,
 		"EngineSecret": c.engineSecret,
@@ -64,7 +64,7 @@ func (c *Client) invoke(ctx context.Context, actionName string, payload map[stri
 		return nil, fmt.Errorf("h3 api status: %d", resp.StatusCode)
 	}
 
-	var result map[string]any
+	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
@@ -72,11 +72,11 @@ func (c *Client) invoke(ctx context.Context, actionName string, payload map[stri
 }
 
 func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, size int, modifiedAfter *time.Time) ([]BizObject, error) {
-	filter := map[string]any{}
+	filter := map[string]interface{}{}
 	if modifiedAfter != nil {
-		filter = map[string]any{
+		filter = map[string]interface{}{
 			"Matcher": "And",
-			"Conditions": []map[string]any{
+			"Conditions": []map[string]interface{}{
 				{
 					"Field":    "ModifiedTime",
 					"Operator": ">",
@@ -85,7 +85,7 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 			},
 		}
 	}
-	payload := map[string]any{
+	payload := map[string]interface{}{
 		"SchemaCode": schemaCode,
 		"Page":       page,
 		"Size":       size,
@@ -96,10 +96,10 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 		return nil, err
 	}
 
-	raw, _ := res["Data"].([]any)
+	raw, _ := res["Data"].([]interface{})
 	items := make([]BizObject, 0, len(raw))
 	for _, x := range raw {
-		m, ok := x.(map[string]any)
+		m, ok := x.(map[string]interface{})
 		if !ok {
 			continue
 		}
@@ -118,16 +118,16 @@ func (c *Client) LoadBizObjects(ctx context.Context, schemaCode string, page, si
 }
 
 func (c *Client) GetFormFields(ctx context.Context, schemaCode string) ([]FieldMeta, error) {
-	payload := map[string]any{"SchemaCode": schemaCode}
+	payload := map[string]interface{}{"SchemaCode": schemaCode}
 	res, err := c.invoke(ctx, "GetMetadata", payload)
 	if err != nil {
 		return nil, err
 	}
 
-	list, _ := res["Fields"].([]any)
+	list, _ := res["Fields"].([]interface{})
 	fields := make([]FieldMeta, 0, len(list))
 	for _, x := range list {
-		m, ok := x.(map[string]any)
+		m, ok := x.(map[string]interface{})
 		if !ok {
 			continue
 		}
@@ -140,7 +140,8 @@ func (c *Client) GetFormFields(ctx context.Context, schemaCode string) ([]FieldM
 	return fields, nil
 }
 
-func asString(v any) string {
+func asString(v interface{}) string {
 	s, _ := v.(string)
 	return s
 }
+

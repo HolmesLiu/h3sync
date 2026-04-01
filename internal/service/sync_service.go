@@ -1,4 +1,4 @@
-﻿package service
+package service
 
 import (
 	"context"
@@ -141,7 +141,7 @@ func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int
 	return synced, lastModified, lastObjectID, nil
 }
 
-func flatten(input map[string]any) map[string]string {
+func flatten(input map[string]interface{}) map[string]string {
 	out := map[string]string{}
 	for k, v := range input {
 		switch tv := v.(type) {
@@ -156,3 +156,4 @@ func flatten(input map[string]any) map[string]string {
 	}
 	return out
 }
+
