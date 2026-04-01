@@ -1,4 +1,4 @@
-package service
+﻿package service
 
 import (
 	"context"
@@ -14,10 +14,10 @@ import (
 )
 
 type SyncService struct {
-	formRepo  *repository.FormRepo
-	h3Client  *h3.Client
-	pageSize  int
-	logger    *zap.Logger
+	formRepo *repository.FormRepo
+	h3Client *h3.Client
+	pageSize int
+	logger   *zap.Logger
 }
 
 func NewSyncService(formRepo *repository.FormRepo, h3Client *h3.Client, pageSize int, logger *zap.Logger) *SyncService {
@@ -76,29 +76,7 @@ func (s *SyncService) SyncForm(ctx context.Context, form models.FormRegistry, tr
 }
 
 func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int, *time.Time, *string, error) {
-	fields, err := s.h3Client.GetFormFields(ctx, form.SchemaCode)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	columns := make([]string, 0, len(fields))
-	for _, f := range fields {
-		if f.Code == "" {
-			continue
-		}
-		columns = append(columns, f.Code)
-		_ = s.formRepo.UpsertFieldRemark(form.ID, models.FormFieldRegistry{
-			FormID:        form.ID,
-			FieldCode:     f.Code,
-			FieldName:     f.Name,
-			ChineseRemark: "",
-			ShowInAdmin:   true,
-			OriginalType:  f.Type,
-			StorageType:   "text",
-		})
-	}
-	sort.Strings(columns)
-
-	if err := s.formRepo.EnsureBizTable(form.SchemaCode, columns); err != nil {
+	if err := s.formRepo.EnsureBizTable(form.SchemaCode, nil); err != nil {
 		return 0, nil, nil, err
 	}
 
@@ -114,6 +92,17 @@ func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int
 		}
 		if len(items) == 0 {
 			break
+		}
+
+		columnSet := map[string]struct{}{}
+		for _, item := range items {
+			for k := range item.Data {
+				columnSet[k] = struct{}{}
+			}
+		}
+		columns := setToSortedSlice(columnSet)
+		if err := s.formRepo.EnsureBizTable(form.SchemaCode, columns); err != nil {
+			return synced, lastModified, lastObjectID, err
 		}
 
 		for _, item := range items {
@@ -157,3 +146,11 @@ func flatten(input map[string]interface{}) map[string]string {
 	return out
 }
 
+func setToSortedSlice(m map[string]struct{}) []string {
+	arr := make([]string, 0, len(m))
+	for k := range m {
+		arr = append(arr, k)
+	}
+	sort.Strings(arr)
+	return arr
+}
