@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"database/sql"
@@ -68,6 +68,72 @@ func (r *FormRepo) ListRecentSyncLogs(limit int) ([]models.SyncLogView, error) {
 	LIMIT $1;
 	`, limit)
 	return rows, err
+}
+
+func (r *FormRepo) ListBizColumns(schemaCode string) ([]string, error) {
+	tbl := BizTableName(schemaCode)
+	var cols []string
+	err := r.db.Select(&cols, `
+	SELECT column_name
+	FROM information_schema.columns
+	WHERE table_schema='public'
+	  AND table_name=$1
+	  AND column_name NOT IN ('object_id','modified_time','raw_json','created_at','updated_at')
+	ORDER BY ordinal_position
+	`, tbl)
+	return cols, err
+}
+
+func (r *FormRepo) CountBizRowsForAdmin(schemaCode string, keyword string) (int, error) {
+	tbl := BizTableName(schemaCode)
+	q := fmt.Sprintf("SELECT COUNT(*) FROM %s", tbl)
+	args := []interface{}{}
+	if strings.TrimSpace(keyword) != "" {
+		q += " WHERE raw_json::text ILIKE $1"
+		args = append(args, "%"+keyword+"%")
+	}
+	var total int
+	if err := r.db.Get(&total, q, args...); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func (r *FormRepo) ListBizRowsForAdmin(schemaCode string, columns []string, keyword string, limit int, offset int) ([]map[string]interface{}, error) {
+	tbl := BizTableName(schemaCode)
+	selectCols := []string{"object_id", "modified_time"}
+	for _, c := range columns {
+		if isSafeIdentifier(c) {
+			selectCols = append(selectCols, c)
+		}
+	}
+
+	q := fmt.Sprintf("SELECT %s FROM %s", strings.Join(selectCols, ","), tbl)
+	args := []interface{}{}
+	if strings.TrimSpace(keyword) != "" {
+		q += " WHERE raw_json::text ILIKE $1"
+		args = append(args, "%"+keyword+"%")
+	}
+	q += " ORDER BY modified_time DESC NULLS LAST, object_id DESC"
+	q += " LIMIT $" + fmt.Sprintf("%d", len(args)+1)
+	q += " OFFSET $" + fmt.Sprintf("%d", len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Queryx(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		m := map[string]interface{}{}
+		if err := rows.MapScan(m); err != nil {
+			return nil, err
+		}
+		result = append(result, normalizeMapScan(m))
+	}
+	return result, nil
 }
 
 func (r *FormRepo) GetBySchema(schema string) (models.FormRegistry, error) {

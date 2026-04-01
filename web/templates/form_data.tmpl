@@ -1,0 +1,41 @@
+﻿<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>h3sync - 表单数据</title>
+</head>
+<body>
+  <h1>表单数据：{{.form.DisplayName}} ({{.schema}})</h1>
+  <p>
+    <a href="/admin/forms">返回表单管理</a>
+    | <a href="/admin/forms/{{.schema}}/export?keyword={{.keyword}}">导出 CSV</a>
+  </p>
+
+  <form method="get" action="/admin/forms/{{.schema}}/data">
+    <input name="keyword" value="{{.keyword}}" placeholder="关键词筛选（全字段）" />
+    <button type="submit">筛选</button>
+  </form>
+
+  <p>总条数：{{.totalCount}}</p>
+
+  <table border="1" cellpadding="6" cellspacing="0">
+    <tr>
+      <th>object_id</th>
+      <th>modified_time</th>
+      {{range .columns}}<th>{{.}}</th>{{end}}
+    </tr>
+    {{range $row := .rows}}
+    <tr>
+      <td>{{index $row "object_id"}}</td>
+      <td>{{index $row "modified_time"}}</td>
+      {{range $col := $.columns}}<td>{{index $row $col}}</td>{{end}}
+    </tr>
+    {{end}}
+  </table>
+
+  <p>
+    {{if .hasPrev}}<a href="/admin/forms/{{.schema}}/data?page={{.prevPage}}&keyword={{.keyword}}">上一页</a>{{end}}
+    {{if .hasNext}}<a href="/admin/forms/{{.schema}}/data?page={{.nextPage}}&keyword={{.keyword}}">下一页</a>{{end}}
+  </p>
+</body>
+</html>

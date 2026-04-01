@@ -1,7 +1,9 @@
-﻿package admin
+package admin
 
 import (
 	"database/sql"
+	"encoding/csv"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,6 +36,8 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.GET("/forms", h.formsPage)
 	admin.POST("/forms", h.saveForm)
 	admin.POST("/forms/:schema/sync", h.manualSync)
+	admin.GET("/forms/:schema/data", h.formDataPage)
+	admin.GET("/forms/:schema/export", h.exportFormDataCSV)
 	admin.POST("/forms/:schema/fields", h.saveFieldRemark)
 	admin.GET("/apikeys", h.apiKeysPage)
 	admin.POST("/apikeys", h.createAPIKey)
@@ -119,6 +123,94 @@ func (h Handlers) manualSync(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/admin/forms?msg=手动同步已触发")
 }
 
+func (h Handlers) formDataPage(c *gin.Context) {
+	schema := c.Param("schema")
+	form, err := h.FormRepo.GetBySchema(schema)
+	if err != nil {
+		c.String(http.StatusNotFound, "form not found")
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page <= 0 {
+		page = 1
+	}
+	limit := 50
+	offset := (page - 1) * limit
+	keyword := strings.TrimSpace(c.Query("keyword"))
+
+	columns, err := h.FormRepo.ListBizColumns(schema)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	rows, err := h.FormRepo.ListBizRowsForAdmin(schema, columns, keyword, limit, offset)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	total, err := h.FormRepo.CountBizRowsForAdmin(schema, keyword)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.HTML(http.StatusOK, "form_data.tmpl", gin.H{
+		"form":       form,
+		"schema":     schema,
+		"columns":    columns,
+		"rows":       rows,
+		"keyword":    keyword,
+		"page":       page,
+		"hasPrev":    page > 1,
+		"prevPage":   page - 1,
+		"hasNext":    page*limit < total,
+		"nextPage":   page + 1,
+		"totalCount": total,
+	})
+}
+
+func (h Handlers) exportFormDataCSV(c *gin.Context) {
+	schema := c.Param("schema")
+	keyword := strings.TrimSpace(c.Query("keyword"))
+
+	columns, err := h.FormRepo.ListBizColumns(schema)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	total, err := h.FormRepo.CountBizRowsForAdmin(schema, keyword)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	rows, err := h.FormRepo.ListBizRowsForAdmin(schema, columns, keyword, total+1, 0)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	filename := fmt.Sprintf("%s_export.csv", schema)
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+
+	w := csv.NewWriter(c.Writer)
+	header := []string{"object_id", "modified_time"}
+	header = append(header, columns...)
+	_ = w.Write(header)
+
+	for _, row := range rows {
+		record := make([]string, 0, len(header))
+		record = append(record, toString(row["object_id"]))
+		record = append(record, toString(row["modified_time"]))
+		for _, col := range columns {
+			record = append(record, toString(row[col]))
+		}
+		_ = w.Write(record)
+	}
+	w.Flush()
+}
+
 func (h Handlers) saveFieldRemark(c *gin.Context) {
 	schema := c.Param("schema")
 	form, err := h.FormRepo.GetBySchema(schema)
@@ -200,4 +292,16 @@ func (h Handlers) audit(c *gin.Context, action, targetType, targetID, detail str
 		Detail:     detail,
 		ClientIP:   c.ClientIP(),
 	})
+}
+
+func toString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
