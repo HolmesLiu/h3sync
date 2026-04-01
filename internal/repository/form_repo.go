@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"database/sql"
@@ -10,7 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type FormRepo struct { db *sqlx.DB }
+type FormRepo struct{ db *sqlx.DB }
 
 func NewFormRepo(db *sqlx.DB) *FormRepo { return &FormRepo{db: db} }
 
@@ -30,6 +30,17 @@ func (r *FormRepo) Upsert(form models.FormRegistry) error {
 	return err
 }
 
+func (r *FormRepo) ListAllForms() ([]models.FormRegistry, error) {
+	var rows []models.FormRegistry
+	err := r.db.Select(&rows, `
+	SELECT id, schema_code, display_name, chinese_remark, sync_method, sync_interval_minutes, sync_mode,
+	       last_sync_at, last_cursor_modified_time, last_cursor_object_id, is_enabled
+	FROM form_registry
+	ORDER BY updated_at DESC, id DESC;
+	`)
+	return rows, err
+}
+
 func (r *FormRepo) ListEnabledAutoDue(now time.Time) ([]models.FormRegistry, error) {
 	var rows []models.FormRegistry
 	err := r.db.Select(&rows, `
@@ -41,6 +52,21 @@ func (r *FormRepo) ListEnabledAutoDue(now time.Time) ([]models.FormRegistry, err
 	  AND (last_sync_at IS NULL OR last_sync_at + (sync_interval_minutes || ' minutes')::interval <= $1)
 	ORDER BY id;
 	`, now)
+	return rows, err
+}
+
+func (r *FormRepo) ListRecentSyncLogs(limit int) ([]models.SyncLogView, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var rows []models.SyncLogView
+	err := r.db.Select(&rows, `
+	SELECT l.id, f.schema_code, f.display_name, l.trigger_type, l.status, l.started_at, l.finished_at, l.synced_count, l.error_message
+	FROM sync_logs l
+	JOIN form_registry f ON f.id = l.form_id
+	ORDER BY l.id DESC
+	LIMIT $1;
+	`, limit)
 	return rows, err
 }
 
@@ -111,7 +137,6 @@ func (r *FormRepo) UpsertBizRow(schemaCode string, objectID string, modifiedTime
 	cols := []string{"object_id", "modified_time", "raw_json", "updated_at"}
 	vals := []interface{}{objectID, modifiedTime, rawJSON, time.Now().UTC()}
 	sets := []string{"modified_time=EXCLUDED.modified_time", "raw_json=EXCLUDED.raw_json", "updated_at=EXCLUDED.updated_at"}
-	i := 5
 	for k, v := range fields {
 		if !isSafeIdentifier(k) {
 			continue
@@ -119,7 +144,6 @@ func (r *FormRepo) UpsertBizRow(schemaCode string, objectID string, modifiedTime
 		cols = append(cols, k)
 		vals = append(vals, v)
 		sets = append(sets, fmt.Sprintf("%s=EXCLUDED.%s", k, k))
-		i++
 	}
 
 	placeholders := make([]string, 0, len(cols))
@@ -284,4 +308,3 @@ func NullString(v string) sql.NullString {
 	}
 	return sql.NullString{String: v, Valid: true}
 }
-

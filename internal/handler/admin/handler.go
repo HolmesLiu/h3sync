@@ -1,4 +1,4 @@
-package admin
+﻿package admin
 
 import (
 	"database/sql"
@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HolmesLiu/h3sync/internal/models"
 	"github.com/HolmesLiu/h3sync/internal/middleware"
+	"github.com/HolmesLiu/h3sync/internal/models"
 	"github.com/HolmesLiu/h3sync/internal/repository"
 	"github.com/HolmesLiu/h3sync/internal/service"
 	"github.com/gin-contrib/sessions"
@@ -17,11 +17,11 @@ import (
 )
 
 type Handlers struct {
-	AdminService *service.AdminService
-	FormRepo     *repository.FormRepo
-	SyncService  *service.SyncService
+	AdminService  *service.AdminService
+	FormRepo      *repository.FormRepo
+	SyncService   *service.SyncService
 	APIKeyService *service.APIKeyService
-	Logger       *zap.Logger
+	Logger        *zap.Logger
 }
 
 func RegisterRoutes(r *gin.Engine, h Handlers) {
@@ -63,12 +63,21 @@ func (h Handlers) dashboard(c *gin.Context) {
 }
 
 func (h Handlers) formsPage(c *gin.Context) {
-	forms, err := h.FormRepo.ListEnabledAutoDue(time.Now().UTC())
+	forms, err := h.FormRepo.ListAllForms()
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.HTML(http.StatusOK, "forms.tmpl", gin.H{"forms": forms})
+	logs, err := h.FormRepo.ListRecentSyncLogs(20)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.HTML(http.StatusOK, "forms.tmpl", gin.H{
+		"forms":   forms,
+		"logs":    logs,
+		"message": c.Query("msg"),
+	})
 }
 
 func (h Handlers) saveForm(c *gin.Context) {
@@ -96,17 +105,18 @@ func (h Handlers) saveForm(c *gin.Context) {
 		return
 	}
 	h.audit(c, "FORM_UPSERT", "form", form.SchemaCode, "update form config")
-	c.Redirect(http.StatusFound, "/admin/forms")
+	c.Redirect(http.StatusFound, "/admin/forms?msg=表单配置已保存")
 }
 
 func (h Handlers) manualSync(c *gin.Context) {
 	schema := c.Param("schema")
 	if err := h.SyncService.SyncBySchema(c.Request.Context(), schema, "MANUAL"); err != nil {
-		c.String(http.StatusInternalServerError, err.Error())
+		h.Logger.Error("manual sync failed", zap.String("schema", schema), zap.Error(err))
+		c.Redirect(http.StatusFound, "/admin/forms?msg=同步失败，请查看日志")
 		return
 	}
 	h.audit(c, "FORM_SYNC_MANUAL", "form", schema, "trigger manual sync")
-	c.Redirect(http.StatusFound, "/admin/forms")
+	c.Redirect(http.StatusFound, "/admin/forms?msg=手动同步已触发")
 }
 
 func (h Handlers) saveFieldRemark(c *gin.Context) {
@@ -134,7 +144,7 @@ func (h Handlers) saveFieldRemark(c *gin.Context) {
 		return
 	}
 	h.audit(c, "FIELD_REMARK_UPSERT", "field", field.FieldCode, "update field remark")
-	c.Redirect(http.StatusFound, "/admin/forms")
+	c.Redirect(http.StatusFound, "/admin/forms?msg=字段备注已保存")
 }
 
 func (h Handlers) apiKeysPage(c *gin.Context) {

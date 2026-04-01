@@ -1,37 +1,84 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
-<head><meta charset="utf-8" /><title>h3sync forms</title></head>
+<head>
+  <meta charset="utf-8" />
+  <title>h3sync - 表单管理</title>
+</head>
 <body>
-  <h1>表单配置</h1>
-  <p><a href="/admin">返回控制台</a></p>
+  <h1>表单管理</h1>
+  <p><a href="/admin">返回控制台</a> | <a href="/admin/apikeys">API Key 管理</a></p>
+  {{if .message}}<p style="color: green;">{{.message}}</p>{{end}}
 
   <h2>新增/更新表单</h2>
   <form method="post" action="/admin/forms">
     <input name="schema_code" placeholder="SchemaCode" required />
     <input name="display_name" placeholder="显示名称" required />
     <input name="chinese_remark" placeholder="中文备注" />
-    <select name="sync_method"><option>AUTO</option><option>MANUAL</option></select>
-    <select name="sync_mode"><option>INCREMENTAL</option><option>FULL</option></select>
+    <select name="sync_method">
+      <option value="AUTO">AUTO</option>
+      <option value="MANUAL">MANUAL</option>
+    </select>
+    <select name="sync_mode">
+      <option value="INCREMENTAL">INCREMENTAL</option>
+      <option value="FULL">FULL</option>
+    </select>
     <input name="sync_interval_minutes" placeholder="周期(分钟)" value="30" />
-    <label><input type="checkbox" name="is_enabled" checked />启用</label>
-    <button type="submit">保存</button>
+    <label><input type="checkbox" name="is_enabled" checked /> 启用</label>
+    <button type="submit">保存表单</button>
   </form>
 
-  <h2>当前表单</h2>
-  <table border="1" cellpadding="6">
-    <tr><th>SchemaCode</th><th>名称</th><th>备注</th><th>同步方式</th><th>周期</th><th>操作</th></tr>
+  <h2>已配置表单</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <tr>
+      <th>SchemaCode</th>
+      <th>名称</th>
+      <th>备注</th>
+      <th>同步方式</th>
+      <th>周期(分钟)</th>
+      <th>启用</th>
+      <th>最近同步</th>
+      <th>操作</th>
+    </tr>
     {{range .forms}}
     <tr>
       <td>{{.SchemaCode}}</td>
       <td>{{.DisplayName}}</td>
       <td>{{.ChineseRemark}}</td>
-      <td>{{.SyncMethod}}</td>
-      <td>{{.SyncIntervalMinutes}} min</td>
+      <td>{{.SyncMethod}} / {{.SyncMode}}</td>
+      <td>{{.SyncIntervalMinutes}}</td>
+      <td>{{if .IsEnabled}}是{{else}}否{{end}}</td>
+      <td>{{if .LastSyncAt}}{{.LastSyncAt}}{{else}}未同步{{end}}</td>
       <td>
         <form style="display:inline" method="post" action="/admin/forms/{{.SchemaCode}}/sync">
           <button type="submit">手动同步</button>
         </form>
       </td>
+    </tr>
+    {{end}}
+  </table>
+
+  <h2>最近同步日志</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <tr>
+      <th>ID</th>
+      <th>表单</th>
+      <th>触发方式</th>
+      <th>状态</th>
+      <th>开始时间</th>
+      <th>结束时间</th>
+      <th>同步条数</th>
+      <th>错误</th>
+    </tr>
+    {{range .logs}}
+    <tr>
+      <td>{{.ID}}</td>
+      <td>{{.DisplayName}} ({{.SchemaCode}})</td>
+      <td>{{.TriggerType}}</td>
+      <td>{{.Status}}</td>
+      <td>{{.StartedAt}}</td>
+      <td>{{if .FinishedAt}}{{.FinishedAt}}{{else}}-{{end}}</td>
+      <td>{{.SyncedCount}}</td>
+      <td>{{if .ErrorMessage}}{{.ErrorMessage}}{{else}}-{{end}}</td>
     </tr>
     {{end}}
   </table>
