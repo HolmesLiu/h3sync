@@ -47,7 +47,8 @@ func Run(ctx context.Context) error {
 	_ = adminSvc.Bootstrap(cfg.AdminInitUser, cfg.AdminInitPassword)
 
 	h3Client := h3.NewClient(cfg.H3BaseURL, cfg.H3EngineCode, cfg.H3EngineSecret, cfg.RequestTimeout)
-	syncSvc := service.NewSyncService(formRepo, h3Client, cfg.SyncPageSize, log)
+	mssqlBackupSvc := service.NewMSSQLBackupService(formRepo, log)
+	syncSvc := service.NewSyncService(formRepo, h3Client, mssqlBackupSvc, cfg.SyncPageSize, log)
 	apiKeySvc := service.NewAPIKeyService(formRepo)
 	querySvc := service.NewQueryService(formRepo)
 
@@ -59,11 +60,12 @@ func Run(ctx context.Context) error {
 	r.Use(sessions.Sessions("h3sync_session", store))
 
 	admin.RegisterRoutes(r, admin.Handlers{
-		AdminService: adminSvc,
-		FormRepo:     formRepo,
-		SyncService:  syncSvc,
-		APIKeyService: apiKeySvc,
-		Logger:       log,
+		AdminService:       adminSvc,
+		FormRepo:           formRepo,
+		SyncService:        syncSvc,
+		MSSQLBackupService: mssqlBackupSvc,
+		APIKeyService:      apiKeySvc,
+		Logger:             log,
 	})
 	openapihandler.RegisterRoutes(r, openapihandler.Handlers{
 		APIKeyService: apiKeySvc,

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>h3sync 用户管理</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <script src="/static/admin.js"></script>
+  <script>
+    window.openCreateUserModal = function() {
+      if (window.openModal) window.openModal('createUserMask');
+    };
+    window.openPasswordModal = function(btn) {
+      const d = btn.dataset;
+      const form = document.getElementById('passwordForm');
+      if (form) form.action = '/admin/users/' + d.id + '/password';
+      const un = document.getElementById('pwUsername');
+      if (un) un.innerText = d.username;
+      if (window.openModal) window.openModal('passwordMask');
+    };
+  </script>
+</head>
+<body>
+  <!-- Modals -->
+  <div id="createUserMask" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-title"><span>新建管理员</span><button onclick="closeModal('createUserMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button></div>
+      <form method="post" action="/admin/users/create">
+        <div class="form-group"><label>登录名 (Username)</label><input name="username" required autocomplete="off" /></div>
+        <div class="form-group" style="margin-top:16px;"><label>初始密码</label><input type="password" name="password" required autocomplete="off" /></div>
+        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" class="btn" onclick="closeModal('createUserMask')">取消</button>
+          <button type="submit" class="btn btn-primary">确认创建</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="passwordMask" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-title"><span>修改密码: <span id="pwUsername" style="color:var(--primary);"></span></span><button onclick="closeModal('passwordMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button></div>
+      <form method="post" id="passwordForm">
+        <div class="form-group"><label>新密码</label><input type="password" name="password" required /></div>
+        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" class="btn" onclick="closeModal('passwordMask')">取消</button>
+          <button type="submit" class="btn btn-primary">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><span>h3sync</span></div>
+      <nav class="sidebar-nav">
+        <a href="/admin">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          控制台
+        </a>
+        <a href="/admin/forms">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          H3表单管理
+        </a>
+        <a href="/admin/mssql/forms">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          MSSQL表单管理
+        </a>
+        <a href="/admin/apikeys">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3L15.5 7.5z"/></svg>
+          API Key 管理
+        </a>
+        <a href="/admin/users" class="active">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          用户管理
+        </a>
+      </nav>
+      <div class="sidebar-footer"><form method="post" action="/admin/logout"><button type="submit" class="btn-logout">退出登录</button></form></div>
+    </aside>
+
+    <div class="mobile-header">
+      <div style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
+
+    <main class="main-content">
+      {{if .message}}<div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">{{.message}}</div>{{end}}
+
+      <!-- 用户列表部分 -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-title">
+          <span>超级管理员账号配置</span>
+          <button class="btn btn-primary" onclick="openCreateUserModal()">添加新账号</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>ID</th><th>用户名</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+              {{range .users}}
+              <tr>
+                <td>{{.ID}}</td>
+                <td><strong>{{.Username}}</strong></td>
+                <td>
+                  <form method="post" action="/admin/users/{{.ID}}/update">
+                    <input type="hidden" name="is_active" value="{{if not .IsActive}}on{{end}}" />
+                    <button class="badge {{if .IsActive}}badge-success{{else}}badge-error{{end}}" style="cursor:pointer; border:none;" type="submit" title="点击切换状态">
+                      {{if .IsActive}}已启用{{else}}已禁用{{end}}
+                    </button>
+                  </form>
+                </td>
+                <td style="color:var(--text-muted); font-size:0.75rem;">{{.CreatedAt.Format "2006-01-02 15:04:05"}}</td>
+                <td>
+                  <div class="action-icon-group">
+                    <button class="btn-icon" onclick="openPasswordModal(this)" data-id="{{.ID}}" data-username="{{.Username}}" title="修改密码"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
+                    {{if ne .ID 1}}
+                    <form method="post" action="/admin/users/{{.ID}}/delete" onsubmit="return confirm('确定要删除该用户吗？');">
+                      <button class="btn-icon danger" type="submit" title="删除用户"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+                    </form>
+                    {{end}}
+                  </div>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 审计日志部分 -->
+      <div class="card">
+        <h3 class="card-title">管理员操作日志审计</h3>
+        <form class="grid-cols-2" style="grid-template-columns: 1fr 1fr auto; align-items: end; margin-bottom: 24px;" method="get">
+          <div class="form-group">
+            <label>动作筛选</label>
+            <select name="log_action">
+              <option value="">全部动作</option>
+              <option value="USER_CREATE" {{if eq .logAction "USER_CREATE"}}selected{{end}}>创建管理员</option>
+              <option value="USER_UPDATE" {{if eq .logAction "USER_UPDATE"}}selected{{end}}>更新管理员</option>
+              <option value="USER_DELETE" {{if eq .logAction "USER_DELETE"}}selected{{end}}>删除管理员</option>
+              <option value="APIKEY_CREATE" {{if eq .logAction "APIKEY_CREATE"}}selected{{end}}>创建 API Key</option>
+              <option value="APIKEY_UPDATE" {{if eq .logAction "APIKEY_UPDATE"}}selected{{end}}>更新 API Key</option>
+              <option value="APIKEY_DELETE" {{if eq .logAction "APIKEY_DELETE"}}selected{{end}}>删除 API Key</option>
+              <option value="MSSQL_FORM_BIND" {{if eq .logAction "MSSQL_FORM_BIND"}}selected{{end}}>绑定 MSSQL 任务</option>
+              <option value="MSSQL_DISCOVER" {{if eq .logAction "MSSQL_DISCOVER"}}selected{{end}}>扫描 MSSQL 表</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>操作人</label>
+            <input name="log_username" value="{{.logUsername}}" placeholder="输入用户名筛选" autocomplete="off" />
+          </div>
+          <button class="btn btn-primary" type="submit" style="margin-bottom:16px;">过滤</button>
+        </form>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标对象</th><th>详情</th><th>来源 IP</th></tr></thead>
+            <tbody>
+              {{range .logs}}
+              <tr>
+                <td style="color:var(--text-muted); font-size:0.75rem;">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+                <td><strong>{{.Username}}</strong></td>
+                <td><span class="badge badge-info">{{.Action}}</span></td>
+                <td>{{.TargetType}} <code style="font-size:0.75rem;">{{.TargetID}}</code></td>
+                <td style="font-size:0.75rem; color:var(--text-muted);">{{.Detail}}</td>
+                <td style="font-size:0.75rem; color:var(--text-muted);">{{.ClientIP}}</td>
+              </tr>
+              {{else}}
+              <tr><td colspan="6" style="text-align:center; padding:40px; color:var(--text-muted);">暂无操作日志</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 0.8125rem; color: var(--text-muted);">共 {{.total}} 条日志，第 {{.page}}/{{.totalPages}} 页</div>
+          <div style="display: flex; gap: 4px;">{{range .pages}}<a class="btn btn-sm {{if eq $.page .}}btn-primary{{end}}" href="/admin/users?page={{.}}&size={{$.size}}&log_action={{$.logAction}}&log_username={{$.logUsername}}">{{.}}</a>{{end}}</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

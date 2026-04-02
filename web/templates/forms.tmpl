@@ -1,87 +1,188 @@
-﻿<!doctype html>
-<html>
+<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>h3sync - 表单管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>h3sync 氚云表单管理</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <script src="/static/admin.js"></script>
+  <script>
+    function safeSetVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+    window.focusGroup = function(id) {
+      const el = document.getElementById(id);
+      if (el) { el.open = true; el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+    };
+    window.openCreateModal = function() {
+      const s = document.getElementById('fSchema'); if (s) { s.readOnly = false; s.value = ''; }
+      document.getElementById('formModalTitle').innerText = '添加表单同步配置';
+      safeSetVal('fName', ''); safeSetVal('fRemark', ''); safeSetVal('fMethod', 'AUTO');
+      safeSetVal('fMode', 'INCREMENTAL'); safeSetVal('fInterval', '60');
+      const en = document.getElementById('fEnabled'); if (en) en.checked = true;
+      safeSetVal('fGroup', ''); safeSetVal('fNewGroup', '');
+      if (typeof openModal === 'function') openModal('formModalMask');
+    };
+    window.openEditModal = function(btn) {
+      const d = btn.dataset;
+      document.getElementById('formModalTitle').innerText = '编辑：' + (d.schema || '');
+      const s = document.getElementById('fSchema'); if (s) { s.value = d.schema || ''; s.readOnly = true; }
+      safeSetVal('fName', d.name || ''); safeSetVal('fRemark', d.remark || '');
+      safeSetVal('fMethod', d.method || 'AUTO'); safeSetVal('fMode', d.mode || 'INCREMENTAL');
+      safeSetVal('fInterval', d.interval || '60');
+      const en = document.getElementById('fEnabled'); if (en) en.checked = (d.enabled === '1');
+      safeSetVal('fGroup', d.group || ''); safeSetVal('fNewGroup', '');
+      if (typeof openModal === 'function') openModal('formModalMask');
+    };
+  </script>
 </head>
 <body>
-  <h1>表单管理</h1>
-  <p><a href="/admin">返回控制台</a> | <a href="/admin/apikeys">API Key 管理</a></p>
-  {{if .message}}<p style="color: green;">{{.message}}</p>{{end}}
+  <div id="formModalMask" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-title"><span id="formModalTitle">设置</span><button onclick="closeModal('formModalMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button></div>
+      <form method="post" action="/admin/forms">
+        <div class="grid-cols-2">
+          <div class="form-group"><label>SchemaCode</label><input name="schema_code" id="fSchema" required /></div>
+          <div class="form-group"><label>表单名称</label><input name="display_name" id="fName" required /></div>
+          <div class="form-group"><label>同步方式</label><select name="sync_method" id="fMethod"><option value="AUTO">自动扫描</option><option value="MANUAL">手动触发</option></select></div>
+          <div class="form-group"><label>同步模式</label><select name="sync_mode" id="fMode"><option value="INCREMENTAL">增量</option><option value="FULL">全量</option></select></div>
+          <div class="form-group"><label>扫描周期 (分)</label><input type="number" name="sync_interval_minutes" id="fInterval" value="60" /></div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:24px;"><input type="checkbox" name="is_enabled" id="fEnabled" style="width:auto;" checked /><span>已启用</span></div>
+          <div class="form-group col-span-full"><label>AI 备注 (语义解释)</label><textarea name="chinese_remark" id="fRemark" rows="2"></textarea></div>
+          <div class="form-group"><label>业务分组</label><select name="group_name" id="fGroup"><option value="">默认分组</option>{{range .groupNames}}<option value="{{.}}">{{.}}</option>{{end}}</select></div>
+          <div class="form-group"><label>新建分组</label><input name="new_group_name" id="fNewGroup" placeholder="输入新组名" /></div>
+        </div>
+        <div style="margin-top:32px;display:flex;justify-content:flex-end;gap:12px;"><button type="button" class="btn" onclick="closeModal('formModalMask')">取消</button><button type="submit" class="btn btn-primary">提交保存</button></div>
+      </form>
+    </div>
+  </div>
 
-  <h2>新增/更新表单</h2>
-  <form method="post" action="/admin/forms">
-    <input name="schema_code" placeholder="SchemaCode" required />
-    <input name="display_name" placeholder="显示名称" required />
-    <input name="chinese_remark" placeholder="中文备注" />
-    <select name="sync_method">
-      <option value="AUTO">AUTO</option>
-      <option value="MANUAL">MANUAL</option>
-    </select>
-    <select name="sync_mode">
-      <option value="INCREMENTAL">INCREMENTAL</option>
-      <option value="FULL">FULL</option>
-    </select>
-    <input name="sync_interval_minutes" placeholder="周期(分钟)" value="30" />
-    <label><input type="checkbox" name="is_enabled" checked /> 启用</label>
-    <button type="submit">保存表单</button>
-  </form>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><span>h3sync</span></div>
+      <nav class="sidebar-nav">
+        <a href="/admin">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          控制台
+        </a>
+        <a href="/admin/forms" class="active">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          H3表单管理
+        </a>
+        <a href="/admin/mssql/forms">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          MSSQL表单管理
+        </a>
+        <a href="/admin/apikeys">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3L15.5 7.5z"/></svg>
+          API Key 管理
+        </a>
+        <a href="/admin/users">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          用户管理
+        </a>
+      </nav>
+      <div class="sidebar-footer"><form method="post" action="/admin/logout"><button type="submit" class="btn-logout">退出登录</button></form></div>
+    </aside>
 
-  <h2>已配置表单</h2>
-  <table border="1" cellpadding="6" cellspacing="0">
-    <tr>
-      <th>SchemaCode</th>
-      <th>名称</th>
-      <th>备注</th>
-      <th>同步方式</th>
-      <th>周期(分钟)</th>
-      <th>启用</th>
-      <th>最近同步</th>
-      <th>操作</th>
-    </tr>
-    {{range .forms}}
-    <tr>
-      <td>{{.SchemaCode}}</td>
-      <td>{{.DisplayName}}</td>
-      <td>{{.ChineseRemark}}</td>
-      <td>{{.SyncMethod}} / {{.SyncMode}}</td>
-      <td>{{.SyncIntervalMinutes}}</td>
-      <td>{{if .IsEnabled}}是{{else}}否{{end}}</td>
-      <td>{{if .LastSyncAt}}{{.LastSyncAt}}{{else}}未同步{{end}}</td>
-      <td>
-        <form style="display:inline" method="post" action="/admin/forms/{{.SchemaCode}}/sync">
-          <button type="submit">手动同步</button>
+    <div class="mobile-header">
+      <div style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
+
+    <main class="main-content">
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-title">
+          <span>H3表单管理</span>
+          <button class="btn btn-primary" onclick="openCreateModal()">添加新同步任务</button>
+        </div>
+      </div>
+
+      {{if .message}}<div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">{{.message}}</div>{{end}}
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;">
+        {{range .groups}}<a href="#{{.ID | urlquery}}" style="text-decoration: none; color: var(--text-muted); background: #fff; border: 1px solid var(--border-color); padding: 4px 12px; border-radius: 20px; font-size: 0.8125rem;" onclick="focusGroup('{{.ID}}');return false;"># {{.Title}}</a>{{end}}
+      </div>
+
+      {{range .groups}}
+      <details id="{{.ID}}" {{if eq $.focus .ID}}open{{end}} style="background:#fff; border:1px solid var(--border-color); border-radius:12px; margin-bottom:16px; box-shadow:var(--shadow);">
+        <summary style="padding:16px; cursor:pointer; font-weight:700; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            <span>{{.Title}}</span>
+            <span class="badge badge-info">{{len .Forms}}</span>
+          </div>
+          <form method="post" action="/admin/forms/groups/rename" onsubmit="event.stopPropagation();" style="display:flex; gap:8px;">
+            <input type="hidden" name="source_type" value="H3" />
+            <input type="hidden" name="old_group_name" value="{{.Title}}" />
+            <input name="new_group_name" placeholder="重命名" style="width:100px; height:30px; font-size:0.75rem;" />
+            <button class="btn btn-sm">保存</button>
+          </form>
+        </summary>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>SchemaCode</th><th>表单名</th><th>AI备注</th><th>方式</th><th>数据量</th><th>同步时间</th><th>操作</th></tr></thead>
+            <tbody>
+              {{range .Forms}}
+              <tr>
+                <td><code>{{.SchemaCode}}</code></td>
+                <td><strong>{{.DisplayName}}</strong></td>
+                <td style="color:var(--text-muted); font-size:0.8125rem;">{{.ChineseRemark}}</td>
+                <td><span class="badge {{if eq .SyncMethod "AUTO"}}badge-success{{else}}badge-info{{end}}">{{.SyncMethodLabel}}</span></td>
+                <td>{{.DataCount}}</td>
+                <td style="font-size:0.75rem;">{{.LastSyncLabel}}</td>
+                <td>
+                  <div class="action-icon-group">
+                    <form method="post" action="/admin/forms/{{.SchemaCode}}/sync"><button class="btn-icon" type="submit" title="手动同步"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button></form>
+                    <a href="/admin/forms/{{.SchemaCode}}/data" class="btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/></svg></a>
+                    <button class="btn-icon" type="button" onclick="openEditModal(this)" data-schema="{{.SchemaCode}}" data-group="{{.GroupName}}" data-name="{{.DisplayName}}" data-remark="{{.ChineseRemark}}" data-method="{{.SyncMethod}}" data-mode="{{.SyncMode}}" data-interval="{{.SyncIntervalMinutes}}" data-enabled="{{if .IsEnabled}}1{{else}}0{{end}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg></button>
+                    <form method="post" action="/admin/forms/{{.SchemaCode}}/delete" style="display:inline;" onsubmit="return confirm('确认删除该表单及其全部同步数据？');"><button class="btn-icon danger" type="submit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
+                  </div>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {{end}}
+
+      <div class="card" style="margin-top: 32px;">
+        <div class="card-title">
+          <span>同步历史审计</span>
+          <a href="/admin/forms" class="btn btn-sm" style="font-weight:400; font-size:0.75rem;">清除过滤</a>
+        </div>
+        <form class="grid-cols-2" style="grid-template-columns: 1fr 1fr auto; align-items: end; margin-bottom: 24px;" method="get">
+          <input type="hidden" name="focus" value="{{.focus}}" />
+          <div class="form-group"><label>执行状态</label><select name="log_status"><option value="">全部</option><option value="SUCCESS" {{if eq .logStatus "SUCCESS"}}selected{{end}}>成功</option><option value="FAILED" {{if eq .logStatus "FAILED"}}selected{{end}}>失败</option></select></div>
+          <div class="form-group"><label>触发来源</label><select name="log_trigger"><option value="">全部</option><option value="AUTO" {{if eq .logTrigger "AUTO"}}selected{{end}}>自动</option><option value="MANUAL" {{if eq .logTrigger "MANUAL"}}selected{{end}}>手动</option></select></div>
+          <button class="btn btn-primary" type="submit" style="margin-bottom:16px;">查询日志</button>
         </form>
-        <a href="/admin/forms/{{.SchemaCode}}/data">查看数据</a>
-      </td>
-    </tr>
-    {{end}}
-  </table>
-
-  <h2>最近同步日志</h2>
-  <table border="1" cellpadding="6" cellspacing="0">
-    <tr>
-      <th>ID</th>
-      <th>表单</th>
-      <th>触发方式</th>
-      <th>状态</th>
-      <th>开始时间</th>
-      <th>结束时间</th>
-      <th>同步条数</th>
-      <th>错误</th>
-    </tr>
-    {{range .logs}}
-    <tr>
-      <td>{{.ID}}</td>
-      <td>{{.DisplayName}} ({{.SchemaCode}})</td>
-      <td>{{.TriggerType}}</td>
-      <td>{{.Status}}</td>
-      <td>{{.StartedAt}}</td>
-      <td>{{if .FinishedAt}}{{.FinishedAt}}{{else}}-{{end}}</td>
-      <td>{{.SyncedCount}}</td>
-      <td>{{if .ErrorMessage}}{{.ErrorMessage}}{{else}}-{{end}}</td>
-    </tr>
-    {{end}}
-  </table>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>任务 ID</th><th>表单名称</th><th>触发方式</th><th>执行结果</th><th>同步时间段</th><th>已更新数</th><th>错误详情</th></tr></thead>
+            <tbody>
+              {{range .logs}}
+              <tr>
+                <td style="color:var(--text-muted); font-size:0.75rem;">#{{.ID}}</td>
+                <td><strong>{{.DisplayName}}</strong></td>
+                <td>{{.TriggerLabel}}</td>
+                <td><span class="badge {{if eq .Status "SUCCESS"}}badge-success{{else if eq .Status "RUNNING"}}badge-info{{else}}badge-error{{end}}">{{.StatusLabel}}</span></td>
+                <td style="font-size:0.75rem;">{{.StartedLabel}} → {{.FinishedLabel}}</td>
+                <td><span class="badge badge-info">{{.SyncedCount}}</span></td>
+                <td style="font-size:0.75rem; color:var(--text-muted); max-width:200px; text-overflow:ellipsis; overflow:hidden;" title="{{.ErrorMessage}}">{{.ErrorMessage}}</td>
+              </tr>
+              {{else}}
+              <tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted);">暂无同步历史记录</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="font-size: 0.8125rem; color: var(--text-muted);">共 {{.logTotal}} 条，第 {{.logPage}}/{{.logTotalPages}} 页</div>
+          <div style="display: flex; gap: 4px;">{{range .logPages}}<a class="btn btn-sm {{if eq $.logPage .}}btn-primary{{end}}" href="/admin/forms?focus={{$.focus | urlquery}}&log_status={{$.logStatus}}&log_trigger={{$.logTrigger}}&log_page={{.}}">{{.}}</a>{{end}}</div>
+        </div>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

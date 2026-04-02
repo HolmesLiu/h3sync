@@ -27,11 +27,19 @@ func (s *APIKeyService) Create(name, remark string, expiresAt *time.Time, schema
 		exp = expiresAt
 	}
 
-	if _, err := s.formRepo.CreateAPIKey(name, remark, hash, prefix, exp, schemaCodes); err != nil {
+	if _, err := s.formRepo.CreateAPIKey(name, remark, hash, prefix, plain, exp, schemaCodes); err != nil {
 		return "", err
 	}
 
 	return plain, nil
+}
+
+func (s *APIKeyService) Update(keyID int64, name, remark string, expiresAt *time.Time, schemaCodes []string) error {
+	return s.formRepo.UpdateAPIKey(keyID, name, remark, expiresAt, schemaCodes)
+}
+
+func (s *APIKeyService) Delete(keyID int64) error {
+	return s.formRepo.DeleteAPIKey(keyID)
 }
 
 func (s *APIKeyService) ValidateForForm(plainKey string, schemaCode string) (int64, error) {

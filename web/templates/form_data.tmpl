@@ -1,41 +1,166 @@
-﻿<!doctype html>
-<html>
+<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>h3sync - 表单数据</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>h3sync 数据查看</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <script src="/static/admin.js"></script>
+  <style>
+    .data-table th { white-space: nowrap; font-size: 0.7rem; }
+    .data-table td { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }
+    .data-table td:hover { white-space: normal; overflow: visible; word-break: break-all; background: #fff; position: relative; z-index: 10; box-shadow: var(--shadow); }
+    
+    .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+    .filter-item { display: flex; flex-direction: column; gap: 4px; }
+    .filter-item label { font-size: 0.75rem; color: var(--text-muted); }
+    .filter-item select, .filter-item input { height: 38px; min-width: 120px; }
+    
+    .stats-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; font-size: 0.875rem; color: var(--text-muted); }
+  </style>
 </head>
 <body>
-  <h1>表单数据：{{.form.DisplayName}} ({{.schema}})</h1>
-  <p>
-    <a href="/admin/forms">返回表单管理</a>
-    | <a href="/admin/forms/{{.schema}}/export?keyword={{.keyword}}">导出 CSV</a>
-  </p>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><span>h3sync</span></div>
+      <nav class="sidebar-nav">
+        <a href="/admin">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          控制台
+        </a>
+        <a href="/admin/forms" {{if eq .sourceType "H3"}}class="active"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          氚云表单管理
+        </a>
+        <a href="/admin/mssql/forms" {{if eq .sourceType "MSSQL_BACKUP"}}class="active"{{end}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          MSSQL表单管理
+        </a>
+        <a href="/admin/apikeys">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3L15.5 7.5z"/></svg>
+          API Key 管理
+        </a>
+        <a href="/admin/users">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          用户管理
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <form method="post" action="/admin/logout"><button type="submit" class="btn-logout">退出登录</button></form>
+      </div>
+    </aside>
 
-  <form method="get" action="/admin/forms/{{.schema}}/data">
-    <input name="keyword" value="{{.keyword}}" placeholder="关键词筛选（全字段）" />
-    <button type="submit">筛选</button>
-  </form>
+    <div class="mobile-header">
+      <div style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
 
-  <p>总条数：{{.totalCount}}</p>
+    <main class="main-content">
+      <div class="card">
+        <div class="card-title">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <a href="{{.backURL}}" class="btn-icon" title="返回列表"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></a>
+            <span>数据查看：{{.form.DisplayName}}</span>
+          </div>
+          <a href="{{.dataBase}}/export?keyword={{.keyword}}&field={{.field}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 CSV
+          </a>
+        </div>
 
-  <table border="1" cellpadding="6" cellspacing="0">
-    <tr>
-      <th>object_id</th>
-      <th>modified_time</th>
-      {{range .columns}}<th>{{.}}</th>{{end}}
-    </tr>
-    {{range $row := .rows}}
-    <tr>
-      <td>{{index $row "object_id"}}</td>
-      <td>{{index $row "modified_time"}}</td>
-      {{range $col := $.columns}}<td>{{index $row $col}}</td>{{end}}
-    </tr>
-    {{end}}
-  </table>
+        <form method="get" action="{{.dataBase}}/data" class="filter-bar">
+          <div class="filter-item">
+            <label>筛选字段</label>
+            <select name="field">
+              <option value="__all__">全部字段</option>
+              {{range .columns}}<option value="{{.}}" {{if eq $.field .}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-item" style="flex: 1;">
+            <label>搜索关键词</label>
+            <input name="keyword" value="{{.keyword}}" placeholder="支持模糊匹配..." />
+          </div>
+          <div class="filter-item">
+            <label>排序字段</label>
+            <select name="sort_field">
+              {{range .sortFields}}<option value="{{.Value}}" {{if eq $.sortField .Value}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>顺序</label>
+            <select name="sort_order">
+              <option value="DESC" {{if eq .sortOrder "DESC"}}selected{{end}}>降序 (Newest)</option>
+              <option value="ASC" {{if eq .sortOrder "ASC"}}selected{{end}}>升序 (Oldest)</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>每页数量</label>
+            <select name="size">
+              <option value="20" {{if eq .size 20}}selected{{end}}>20 条</option>
+              <option value="50" {{if eq .size 50}}selected{{end}}>50 条</option>
+              <option value="100" {{if eq .size 100}}selected{{end}}>100 条</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary" style="height: 38px;">应用筛选</button>
+        </form>
 
-  <p>
-    {{if .hasPrev}}<a href="/admin/forms/{{.schema}}/data?page={{.prevPage}}&keyword={{.keyword}}">上一页</a>{{end}}
-    {{if .hasNext}}<a href="/admin/forms/{{.schema}}/data?page={{.nextPage}}&keyword={{.keyword}}">下一页</a>{{end}}
-  </p>
+        <div class="stats-bar">
+          <span>总记录数: <strong>{{.totalCount}}</strong></span>
+          <span>当前页码: <strong>{{.page}} / {{.totalPages}}</strong></span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="min-width: 180px;">ObjectID</th>
+                <th style="min-width: 180px;">最后修改时间</th>
+                {{range .columns}}<th>{{.}}</th>{{end}}
+              </tr>
+            </thead>
+            <tbody>
+              {{range $row := .rows}}
+              <tr>
+                <td><code style="font-size: 0.75rem;">{{index $row "object_id"}}</code></td>
+                <td style="color: var(--text-muted);">{{index $row "modified_time"}}</td>
+                {{range $col := $.columns}}
+                  <td title="{{index $row $col}}">{{index $row $col}}</td>
+                {{end}}
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div style="display: flex; gap: 8px;">
+            {{if .hasPrev}}
+            <a href="{{.dataBase}}/data?page={{.prevPage}}&size={{.size}}&field={{.field}}&keyword={{.keyword}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn">上一页</a>
+            {{end}}
+            <div style="display: flex; gap: 4px;">
+              {{range .pages}}
+              <a class="btn btn-sm {{if eq $.page .}}btn-primary{{end}}" href="{{$.dataBase}}/data?page={{.}}&size={{$.size}}&field={{$.field}}&keyword={{$.keyword}}&sort_field={{$.sortField}}&sort_order={{$.sortOrder}}">{{.}}</a>
+              {{end}}
+            </div>
+            {{if .hasNext}}
+            <a href="{{.dataBase}}/data?page={{.nextPage}}&size={{.size}}&field={{.field}}&keyword={{.keyword}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn">下一页</a>
+            {{end}}
+          </div>
+
+          <form method="get" action="{{.dataBase}}/data" style="display: flex; align-items: center; gap: 8px;">
+            <input type="hidden" name="size" value="{{.size}}" />
+            <input type="hidden" name="field" value="{{.field}}" />
+            <input type="hidden" name="keyword" value="{{.keyword}}" />
+            <input type="hidden" name="sort_field" value="{{.sortField}}" />
+            <input type="hidden" name="sort_order" value="{{.sortOrder}}" />
+            <span style="font-size: 0.8125rem; color: var(--text-muted);">跳转至</span>
+            <input name="page" style="width: 60px; text-align: center; height: 32px;" placeholder="{{.page}}" />
+            <button type="submit" class="btn btn-sm">跳转</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

@@ -1,10 +1,11 @@
-﻿package service
+package service
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/HolmesLiu/h3sync/internal/connector/h3"
@@ -14,14 +15,15 @@ import (
 )
 
 type SyncService struct {
-	formRepo *repository.FormRepo
-	h3Client *h3.Client
-	pageSize int
-	logger   *zap.Logger
+	formRepo    *repository.FormRepo
+	h3Client    *h3.Client
+	mssqlBackup *MSSQLBackupService
+	pageSize    int
+	logger      *zap.Logger
 }
 
-func NewSyncService(formRepo *repository.FormRepo, h3Client *h3.Client, pageSize int, logger *zap.Logger) *SyncService {
-	return &SyncService{formRepo: formRepo, h3Client: h3Client, pageSize: pageSize, logger: logger}
+func NewSyncService(formRepo *repository.FormRepo, h3Client *h3.Client, mssqlBackup *MSSQLBackupService, pageSize int, logger *zap.Logger) *SyncService {
+	return &SyncService{formRepo: formRepo, h3Client: h3Client, mssqlBackup: mssqlBackup, pageSize: pageSize, logger: logger}
 }
 
 func (s *SyncService) RunAutoOnce(ctx context.Context) {
@@ -66,6 +68,9 @@ func (s *SyncService) SyncForm(ctx context.Context, form models.FormRegistry, tr
 	}
 
 	if runErr != nil {
+		if lastModified != nil {
+			_ = s.formRepo.UpdateCursor(form.ID, lastModified, lastObjectID)
+		}
 		msg := runErr.Error()
 		_ = s.formRepo.FinishSyncLog(logID, "FAILED", count, &msg, &cursorBefore, &cursorAfter)
 		return runErr
@@ -76,6 +81,14 @@ func (s *SyncService) SyncForm(ctx context.Context, form models.FormRegistry, tr
 }
 
 func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int, *time.Time, *string, error) {
+	if strings.EqualFold(form.SourceType, "MSSQL_BACKUP") {
+		if s.mssqlBackup == nil {
+			return 0, nil, nil, fmt.Errorf("mssql backup service not configured")
+		}
+		count, err := s.mssqlBackup.SyncForm(ctx, form)
+		return count, nil, nil, err
+	}
+
 	if err := s.formRepo.EnsureBizTable(form.SchemaCode, nil); err != nil {
 		return 0, nil, nil, err
 	}
@@ -115,7 +128,7 @@ func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int
 				return synced, lastModified, lastObjectID, err
 			}
 			synced++
-			if item.ModifiedTime != nil {
+			if shouldAdvanceCursor(lastModified, lastObjectID, item.ModifiedTime, item.ObjectID) {
 				lastModified = item.ModifiedTime
 				id := item.ObjectID
 				lastObjectID = &id
@@ -124,8 +137,14 @@ func (s *SyncService) doSync(ctx context.Context, form models.FormRegistry) (int
 		page++
 	}
 
-	if err := s.formRepo.UpdateCursor(form.ID, lastModified, lastObjectID); err != nil {
-		return synced, lastModified, lastObjectID, fmt.Errorf("update cursor: %w", err)
+	if lastModified != nil {
+		if err := s.formRepo.UpdateCursor(form.ID, lastModified, lastObjectID); err != nil {
+			return synced, lastModified, lastObjectID, fmt.Errorf("update cursor: %w", err)
+		}
+	} else {
+		if err := s.formRepo.TouchLastSync(form.ID); err != nil {
+			return synced, lastModified, lastObjectID, fmt.Errorf("touch last sync: %w", err)
+		}
 	}
 	return synced, lastModified, lastObjectID, nil
 }
@@ -153,4 +172,23 @@ func setToSortedSlice(m map[string]struct{}) []string {
 	}
 	sort.Strings(arr)
 	return arr
+}
+
+func shouldAdvanceCursor(currTime *time.Time, currID *string, nextTime *time.Time, nextID string) bool {
+	if nextTime == nil {
+		return false
+	}
+	if currTime == nil {
+		return true
+	}
+	if nextTime.After(*currTime) {
+		return true
+	}
+	if nextTime.Equal(*currTime) {
+		if currID == nil {
+			return true
+		}
+		return nextID > *currID
+	}
+	return false
 }

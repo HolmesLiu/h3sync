@@ -1,0 +1,2 @@
+ALTER TABLE form_registry
+ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT '默认分组';
