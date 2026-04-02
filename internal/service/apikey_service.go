@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/HolmesLiu/h3sync/internal/auth"
+	"github.com/HolmesLiu/h3sync/internal/models"
 	"github.com/HolmesLiu/h3sync/internal/repository"
 )
 
@@ -52,4 +53,16 @@ func (s *APIKeyService) ValidateForForm(plainKey string, schemaCode string) (int
 		return 0, err
 	}
 	return ak.ID, nil
+}
+
+func (s *APIKeyService) GetAllowedForms(plainKey string) ([]models.FormRegistry, error) {
+	hash := auth.HashAPIKey(plainKey)
+	ak, err := s.formRepo.GetAPIKeyByHash(hash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	return s.formRepo.ListFormsForAPIKey(ak.ID)
 }

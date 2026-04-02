@@ -568,6 +568,31 @@ func (r *FormRepo) ValidateAPIKeyAndForm(keyHash string, schemaCode string) (mod
 	return k, err
 }
 
+func (r *FormRepo) GetAPIKeyByHash(keyHash string) (models.APIKey, error) {
+	var k models.APIKey
+	err := r.db.Get(&k, `
+	SELECT id, name, remark, key_hash, key_prefix, expires_at, revoked_at, created_at
+	FROM api_keys
+	WHERE key_hash=$1
+	  AND revoked_at IS NULL
+	  AND (expires_at IS NULL OR expires_at > now())
+	LIMIT 1
+	`, keyHash)
+	return k, err
+}
+
+func (r *FormRepo) ListFormsForAPIKey(keyID int64) ([]models.FormRegistry, error) {
+	var forms []models.FormRegistry
+	err := r.db.Select(&forms, `
+	SELECT fr.id, fr.schema_code, fr.source_type, fr.group_name, fr.display_name, fr.chinese_remark, fr.sync_method, fr.sync_interval_minutes, fr.sync_mode, fr.is_enabled, fr.created_at, fr.updated_at
+	FROM form_registry fr
+	JOIN api_key_form_permissions p ON p.form_id=fr.id
+	WHERE p.api_key_id=$1
+	ORDER BY fr.id ASC
+	`, keyID)
+	return forms, err
+}
+
 func (r *FormRepo) CreateAPIKey(name, remark, keyHash, keyPrefix, keyValue string, expiresAt *time.Time, schemaCodes []string) (int64, error) {
 	tx, err := r.db.Beginx()
 	if err != nil {

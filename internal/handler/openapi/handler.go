@@ -19,6 +19,7 @@ type Handlers struct {
 
 func RegisterRoutes(r *gin.Engine, h Handlers) {
 	g := r.Group("/openapi")
+	g.GET("/forms", h.listForms)
 	g.POST("/query/:schema", h.query)
 }
 
@@ -59,5 +60,40 @@ func (h Handlers) query(c *gin.Context) {
 	}
 	h.QueryService.AddQueryLog(apiKeyID, schema, req, rows, time.Since(start), c.ClientIP())
 	c.JSON(http.StatusOK, result)
+}
+
+func (h Handlers) listForms(c *gin.Context) {
+	key := strings.TrimSpace(c.GetHeader("X-API-Key"))
+	if key == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "missing X-API-Key"})
+		return
+	}
+
+	forms, err := h.APIKeyService.GetAllowedForms(key)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"message": "forbidden"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		return
+	}
+
+	type formBrief struct {
+		SchemaCode    string `json:"schemaCode"`
+		DisplayName   string `json:"displayName"`
+		ChineseRemark string `json:"chineseRemark"`
+	}
+	var res []formBrief
+	for _, f := range forms {
+		res = append(res, formBrief{
+			SchemaCode:    f.SchemaCode,
+			DisplayName:   f.DisplayName,
+			ChineseRemark: f.ChineseRemark,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"forms": res,
+	})
 }
 

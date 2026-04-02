@@ -123,7 +123,29 @@
       const el = document.getElementById(id);
       if(!el) return;
       const text = el.innerText || el.textContent;
-      navigator.clipboard.writeText(text).then(() => showToast('已成功复制到剪贴板'));
+      
+      const fallbackCopy = function(txt) {
+        const ta = document.createElement("textarea");
+        ta.value = txt;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('已成功复制到剪贴板');
+        } catch (e) {
+          showToast('复制受限，请手动框选复制');
+        }
+        document.body.removeChild(ta);
+      };
+
+      if (navigator.clipboard && window.isSecureContext !== false) {
+        navigator.clipboard.writeText(text).then(() => showToast('已成功复制到剪贴板')).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
     };
     window.switchTab = function(tabId, btn) {
       document.querySelectorAll('.doc-tab-btn').forEach(b => b.classList.remove('active'));
@@ -268,7 +290,8 @@
 ## 1. 基础信息
 
 - OpenAPI 根路径：`/openapi`
-- 查询接口：`POST http://{{.host}}/openapi/query/{schema}`
+- **步骤一：握手与表单发现**：`GET http://{{.host}}/openapi/forms` （获取可查询的表单 schema 列表和中文语义）
+- **步骤二：查询表单数据**：`POST http://{{.host}}/openapi/query/{schema}`
 - 鉴权头：`X-API-Key: <你的apikey>`
 - 数据格式：`Content-Type: application/json`
 
@@ -279,20 +302,18 @@
 
 ## 2. 握手与鉴权流程
 
-每次调用都执行以下校验（无需额外登录接口）：
+每一次全新的对话交互，必须遵循以下步骤：
 
-1. 客户端携带 `X-API-Key`。
-2. 服务端校验：
-- Key 是否存在且哈希匹配。
-- Key 是否未过期、未停用。
-- Key 是否绑定了该 `schema` 查询权限。
-3. 通过后执行查询并记录 `api_query_logs`。
+1. 客户端携带 `X-API-Key` 请求 `GET http://{{.host}}/openapi/forms` 获取可用表单。
+2. 收到返回的表单列表（包含 `schemaCode` / `displayName` / `chineseRemark`）后，根据用户的意图锁定正确的表单。
+3. 把选定的 `schemaCode` 拼接入 URL，向 `POST http://{{.host}}/openapi/query/{schema}` 发送查询请求检索真实数据。
+4. 若 API Key 不合法、被停用或没权限，均会返回异常状态码。
 
 常见返回：
 - `401`：缺少 `X-API-Key`
 - `403`：Key 无效或没有该表单权限
 - `400`：请求体格式错误、操作符不支持等
-- `200`：查询成功
+- `200`：成功
 
 ## 3. 请求体定义
 
@@ -390,11 +411,13 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
 
 建议 AI 在会话中遵循以下规则：
 
-1. 先读取 `form.chineseRemark` + `fieldRemarks`，确认字段业务语义再构造查询。
-2. 优先使用 `eq` 精确条件，必要时再用 `contains`。
-3. 单次请求 `limit` 不超过 `200`，大结果集按 `offset` 分页。
-4. 需要追溯原始结构时优先看 `rows[].raw_json`。
-5. 当接口返回 `403` 时，不重试同参数，先检查 key 权限是否包含该表单。
+1. 开场必须先调用 `GET http://{{.host}}/openapi/forms` 获取授权表单列表与其备注。绝对不要凭空猜测 `schema`。
+2. 获取到列表后，利用返回的 `chineseRemark` 理解各个表单的作用，再向 `POST /openapi/query/{schema}` 发起具体数据查询。
+3. 阅读 `POST` 接口返回的 `fieldRemarks` 熟悉字段结构。
+4. 优先使用 `eq` 精确条件过滤数据，必要时再用 `contains`。
+5. 单次请求 `limit` 不超过 `200`，超大数据集注意利用 `offset` 分页读取。
+6. 需要获取复杂的原生 JSON 树状结构时，优先读取 `rows[].raw_json`。
+7. 遇到 `403` 不重试同参数，说明 Key 权限没包含该表单，应明确告知用户权限受限。
 
 ## 7. 故障排查
 
@@ -406,22 +429,34 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
 ## 8. 推荐给 AI 的最小调用模板
 
 ```json
-{
-  "intent": "先理解字段备注，再按业务关键词查询",
-  "http": {
-    "method": "POST",
-    "url": "http://{{.host}}/openapi/query/{schema}",
-    "headers": {
-      "Content-Type": "application/json",
-      "X-API-Key": "<apikey>"
-    },
-    "body": {
-      "limit": 100,
-      "offset": 0,
-      "filters": []
+[
+  {
+    "intent": "第一步：先通过握手获取授权表单列表及其备注",
+    "http": {
+      "method": "GET",
+      "url": "http://{{.host}}/openapi/forms",
+      "headers": {
+        "X-API-Key": "<apikey>"
+      }
+    }
+  },
+  {
+    "intent": "第二步：在选中正确的 schema 后进行内容检索",
+    "http": {
+      "method": "POST",
+      "url": "http://{{.host}}/openapi/query/{schema}",
+      "headers": {
+        "Content-Type": "application/json",
+        "X-API-Key": "<apikey>"
+      },
+      "body": {
+        "limit": 100,
+        "offset": 0,
+        "filters": []
+      }
     }
   }
-}
+]
 ```</pre>
         </div>
 
