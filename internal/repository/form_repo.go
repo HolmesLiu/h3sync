@@ -584,7 +584,7 @@ func (r *FormRepo) GetAPIKeyByHash(keyHash string) (models.APIKey, error) {
 func (r *FormRepo) ListFormsForAPIKey(keyID int64) ([]models.FormRegistry, error) {
 	var forms []models.FormRegistry
 	err := r.db.Select(&forms, `
-	SELECT fr.id, fr.schema_code, fr.source_type, fr.group_name, fr.display_name, fr.chinese_remark, fr.sync_method, fr.sync_interval_minutes, fr.sync_mode, fr.is_enabled, fr.created_at, fr.updated_at
+	SELECT fr.id, fr.schema_code, fr.source_type, fr.group_name, fr.display_name, fr.chinese_remark, fr.sync_method, fr.sync_interval_minutes, fr.sync_mode, fr.last_sync_at, fr.last_cursor_modified_time, fr.last_cursor_object_id, fr.is_enabled
 	FROM form_registry fr
 	JOIN api_key_form_permissions p ON p.form_id=fr.id
 	WHERE p.api_key_id=$1
