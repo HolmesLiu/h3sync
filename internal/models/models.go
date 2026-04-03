@@ -95,3 +95,10 @@ type AdminUser struct {
 	CreatedAt    time.Time `db:"created_at"`
 	UpdatedAt    time.Time `db:"updated_at"`
 }
+
+type AgentRole struct {
+	ID        int64     `db:"id"`
+	Name      string    `db:"name"`
+	Content   string    `db:"content"`
+	CreatedAt time.Time `db:"created_at"`
+}

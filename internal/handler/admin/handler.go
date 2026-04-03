@@ -25,6 +25,7 @@ import (
 type Handlers struct {
 	AdminService       *service.AdminService
 	FormRepo           *repository.FormRepo
+	AgentRepo          *repository.AgentRepo
 	SyncService        *service.SyncService
 	MSSQLBackupService *service.MSSQLBackupService
 	APIKeyService      *service.APIKeyService
@@ -110,6 +111,9 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.POST("/users/:id/password", h.updateAdminUserPassword)
 	admin.POST("/users/:id/delete", h.deleteAdminUser)
 	admin.POST("/apikeys/export-memory", h.exportAPIKeyMemory)
+	admin.GET("/agent-gen", h.agentGenPage)
+	admin.POST("/agent-gen/roles", h.createAgentRole)
+	admin.POST("/agent-gen/roles/:id/delete", h.deleteAgentRole)
 	admin.POST("/logout", h.logout)
 }
 
@@ -132,7 +136,7 @@ func (h Handlers) loginPost(c *gin.Context) {
 }
 
 func (h Handlers) dashboard(c *gin.Context) {
-	c.HTML(http.StatusOK, "dashboard.tmpl", gin.H{"title": "控制台"})
+	c.HTML(http.StatusOK, "dashboard.tmpl", gin.H{"title": "控制台", "navItem": "dashboard"})
 }
 
 func (h Handlers) formsPage(c *gin.Context) {
@@ -217,6 +221,7 @@ func (h Handlers) formsPage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "forms.tmpl", gin.H{
+		"navItem":       "forms",
 		"groups":        groups,
 		"logs":          logs,
 		"message":       c.Query("msg"),
@@ -427,6 +432,7 @@ func (h Handlers) mssqlFormsPage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "mssql_forms.tmpl", gin.H{
+		"navItem":       "mssql_forms",
 		"title":         "MSSQL表单管理",
 		"groups":        groups,
 		"groupNames":    groupNames,
@@ -602,6 +608,7 @@ func (h Handlers) formDataPage(c *gin.Context) {
 	pages := buildPages(page, totalPages)
 
 	c.HTML(http.StatusOK, "form_data.tmpl", gin.H{
+		"navItem":    "mssql_forms",
 		"form":       form,
 		"schema":     schema,
 		"sourceType": form.SourceType,
@@ -726,6 +733,7 @@ func (h Handlers) apiKeysPage(c *gin.Context) {
 	permJSON, _ := json.Marshal(permMap)
 
 	c.HTML(http.StatusOK, "apikeys.tmpl", gin.H{
+		"navItem":    "apikeys",
 		"title":      "API Keys",
 		"keys":       keys,
 		"formGroups": groups,
@@ -784,6 +792,7 @@ func (h Handlers) createAPIKey(c *gin.Context) {
 	}
 	permJSON, _ := json.Marshal(permMap)
 	c.HTML(http.StatusOK, "apikeys.tmpl", gin.H{
+		"navItem":    "apikeys",
 		"title":      "API Keys",
 		"keys":       keys,
 		"formGroups": groups,
@@ -1208,7 +1217,7 @@ func (h Handlers) usersPage(c *gin.Context) {
 		"logAction": action,
 		"logUsername": username,
 		"message": c.Query("msg"),
-		"activeMenu": "users", // added for active state
+		"navItem": "users",
 	})
 }
 

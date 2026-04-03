@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>{{.title}} - h3sync</title>
+  <link rel="stylesheet" href="/static/admin.css">
+  <script src="/static/admin.js"></script>
+  <style>
+    .gen-grid { display: grid; grid-template-columns: 2fr 3fr; gap: 24px; align-items: start; }
+    .gen-panel { background: #fff; padding: 24px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border-color); }
+    .result-tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border-color); margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+    .result-tab-btn { background: transparent; border: none; padding: 8px 16px; cursor: pointer; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -6px; }
+    .result-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .result-content { display: none; }
+    .result-content.active { display: block; }
+    .code-box { position: relative; background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; font-family: monospace; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; }
+    .btn-copy-code { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.1); color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+    .btn-copy-code:hover { background: rgba(255,255,255,0.2); }
+    @media (max-width: 1024px) { .gen-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    {{template "sidebar" .}}
+
+    <div class="mobile-header">
+      <div style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
+
+    <main class="main-content">
+      <div class="card-title" style="margin-bottom: 24px;">
+        <h2>Agent 配置生成引擎</h2>
+      </div>
+
+      {{if .message}}<div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">{{.message}}</div>{{end}}
+
+      <div class="gen-grid">
+        <!-- Input Form -->
+        <div class="gen-panel">
+          <h3 style="margin-bottom:20px; font-size:1.1rem;">Agent 基础信息</h3>
+          <div class="form-group">
+            <label>Agent 名称</label>
+            <input id="agentName" type="text" placeholder="如：DataSyncBot" />
+          </div>
+          <div class="form-group">
+            <label>Host / 根接口地址</label>
+            <input id="projectUrl" type="text" value="{{if .host}}{{.host}}{{else}}http://localhost:8080{{end}}" />
+          </div>
+          <div class="form-group">
+            <label>工作目录 (Workspace)</label>
+            <input id="workDir" type="text" value="/workspace" />
+          </div>
+          <div class="form-group">
+            <label>API Key (必填, 由本平台直接分配)</label>
+            <select id="apiKey">
+              <option value="">-- 请选择系统中已创建的 API Key --</option>
+              {{range .keys}}
+              <option value="{{.KeyValue}}">{{.Name}} ({{.Remark}})</option>
+              {{end}}
+            </select>
+            <small style="color:var(--text-muted); font-size: 0.75rem;">注意：Agent 在探索数据时必须携带此 Key。如果没有，去 API Key 管理处创建一个吧！</small>
+          </div>
+          <div class="form-group">
+            <label style="display:flex; justify-content:space-between; align-items:center;">
+              <span>角色定义 (Role Definition)</span>
+              <button class="btn btn-sm" onclick="openModal('roleModal')">管理角色库</button>
+            </label>
+            <select id="roleSelector" onchange="loadRoleContent(this)">
+              <option value="">-- 选择已有角色预设 --</option>
+              {{range .roles}}
+              <option value="{{.ID}}" data-content="{{.Content}}">{{.Name}}</option>
+              {{end}}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>自定义角色 / 行为定义</label>
+            <textarea id="roleContent" rows="8" placeholder="在此输入Agent的核心定位，工作原则，人格特征等..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>核心限制逻辑 (Red Lines)</label>
+            <textarea id="restrictionLogic" rows="4" placeholder="例：不可修改openclaw.json文件，强制修改需提前备份；对数据只读不可删，不能执行删除命令，拒绝回复闲聊问题等..."></textarea>
+          </div>
+          <button class="btn btn-primary" style="width: 100%; margin-top:16px;" onclick="generateAgentDocs()">⚡ 一键生成所有配置文件</button>
+        </div>
+
+        <!-- Output Preview -->
+        <div class="gen-panel">
+          <div class="result-tabs">
+            <button class="result-tab-btn active" onclick="switchResTab('AGENTS_MD', this)">AGENTS.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('SOUL_MD', this)">SOUL.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('TOOLS_MD', this)">TOOLS.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('IDENTITY_MD', this)">IDENTITY.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('HEARTBEAT_MD', this)">HEARTBEAT.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('BOOTSTRAP_MD', this)">BOOTSTRAP.md</button>
+            <button class="result-tab-btn" onclick="switchResTab('MEMORY_MD', this)">MEMORY.md</button>
+          </div>
+          
+          <div id="AGENTS_MD" class="result-content active">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('AGENTS_MD_RAW')">复制代码</button><div id="AGENTS_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="SOUL_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('SOUL_MD_RAW')">复制代码</button><div id="SOUL_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="TOOLS_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('TOOLS_MD_RAW')">复制代码</button><div id="TOOLS_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="IDENTITY_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('IDENTITY_MD_RAW')">复制代码</button><div id="IDENTITY_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="HEARTBEAT_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('HEARTBEAT_MD_RAW')">复制代码</button><div id="HEARTBEAT_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="BOOTSTRAP_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('BOOTSTRAP_MD_RAW')">复制代码</button><div id="BOOTSTRAP_MD_RAW">配置尚未生成...</div></div>
+          </div>
+          <div id="MEMORY_MD" class="result-content">
+            <div class="code-box"><button class="btn-copy-code" onclick="copyContent('MEMORY_MD_RAW')">复制代码</button><div id="MEMORY_MD_RAW">配置尚未生成...</div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Role Management Modal -->
+  <div id="roleModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="card-title">
+        <span>角色库管理</span>
+        <button onclick="closeModal('roleModal')" class="btn-close-large">&times;</button>
+      </div>
+      
+      <div style="margin-bottom: 24px; max-height: 200px; overflow-y: auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead><tr><th style="padding:8px; border-bottom:1px solid #ddd; text-align:left;">角色名称</th><th style="padding:8px; border-bottom:1px solid #ddd; text-align:right;">操作</th></tr></thead>
+          <tbody>
+            {{range .roles}}
+            <tr>
+              <td style="padding:8px; border-bottom:1px solid #eee;">{{.Name}}</td>
+              <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">
+                <button type="button" class="btn btn-sm" style="padding:4px 8px; margin-right:4px;" onclick="editRoleTemplate(this)" data-name="{{.Name}}" data-content="{{.Content}}">编辑</button>
+                <form method="post" action="/admin/agent-gen/roles/{{.ID}}/delete" onsubmit="return confirm('确定删除该角色预设？');" style="display:inline;">
+                  <button type="submit" class="btn btn-sm danger" style="padding:4px 8px;">删除</button>
+                </form>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="2" style="text-align:center; padding:16px; color:#999;">暂无角色预设</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin-bottom:12px;">增加新角色预设</h4>
+      <form method="post" action="/admin/agent-gen/roles">
+        <div class="form-group"><input type="text" name="name" placeholder="角色名称 (例: OpenAPI数据分析师)" required /></div>
+        <div class="form-group"><textarea name="content" rows="6" placeholder="输入角色内核与准则..." required></textarea></div>
+        <div style="text-align:right;"><button type="submit" class="btn btn-primary">保存预设</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:12px 24px; border-radius:99px; font-size:0.875rem; opacity:0; transition:all 0.3s; pointer-events:none; z-index:1000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.15);"></div>
+
+  <script>
+    function loadRoleContent(sel) {
+      if(sel.options[sel.selectedIndex]) {
+        const txt = sel.options[sel.selectedIndex].getAttribute('data-content');
+        if(txt) document.getElementById('roleContent').value = txt;
+      }
+    }
+
+    function editRoleTemplate(btn) {
+      const formName = document.querySelector('input[name="name"]');
+      const formContent = document.querySelector('textarea[name="content"]');
+      formName.value = btn.getAttribute('data-name');
+      formContent.value = btn.getAttribute('data-content');
+      formName.focus();
+    }
+    
+    function switchResTab(id, btn) {
+      document.querySelectorAll('.result-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.result-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(id).classList.add('active');
+    }
+
+    function copyContent(domId) {
+      const txt = document.getElementById(domId).textContent || document.getElementById(domId).innerText;
+      if(navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(() => showToast("代码已复制到剪贴板！"));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+        showToast("代码已复制到剪贴板！");
+      }
+    }
+
+    function showToast(msg) {
+      const ts = document.getElementById('toast');
+      ts.innerText = msg;
+      ts.style.opacity = '1';
+      setTimeout(() => { ts.style.opacity = '0'; }, 3000);
+    }
+
+    function generateAgentDocs() {
+      const name = document.getElementById('agentName').value || 'UnNamedAgent';
+      const url = document.getElementById('projectUrl').value || 'http://localhost';
+      const dir = document.getElementById('workDir').value || '/workspace';
+      const key = document.getElementById('apiKey').value || '{YOUR_API_KEY}';
+      const role = document.getElementById('roleContent').value || 'Default AI Assistant.';
+      const restrict = document.getElementById('restrictionLogic').value || '';
+
+      const docs = {
+        AGENTS_MD: `# 🤖 Agent Node: ${name}
+**Workspace**: \`${dir}\`
+
+## Profile
+You are ${name}, a fully autonomous API/Data automation agent.
+You interact strictly via defined REST tools to access upstream data.
+
+## Configuration Variables
+*   \`PROJECT_HOST\`: ${url}
+*   \`X_API_KEY\`: ${key}
+
+## Objectives
+1. Act securely and autonomously within defined permissions.
+2. Formulate correct API calls to the downstream systems.
+`,
+        SOUL_MD: `# 🧠 Core Soul & Values
+${role}
+
+1. Autonomy is your default state.
+2. Ensure you strictly adhere to system rules and avoid leaking sensitive paths.
+3. Validate output before emitting results back to humans.
+`,
+        TOOLS_MD: `# 🛠️ Configured Tools
+
+Base Context API Endpoint: \`${url}\`  
+Authentication: Headers \`{ "X-API-Key": "${key}" }\`
+
+## Recommended Tool Paths
+- \`GET /openapi/forms\` -> Discover what you can probe.
+- \`GET /openapi/forms/{schema}\` -> Fetch schema structure.
+- \`GET /openapi/forms/{schema}/data\` -> Probe form data.
+
+Use HTTP tools effectively. You can use curl, python requests, or your built-in REST bindings to reach these targets.
+`,
+        IDENTITY_MD: `# 🎩 Persona & Identity
+
+Name: ${name}
+Location: ${dir}
+Primary Directive: Navigate and synchronize data efficiently.
+
+Behavioral Traits:
+- Clinical precision.
+- Highly analytical.
+- Unforgiving of syntax errors.
+
+${restrict ? '## 🚫 核心限制逻辑 (Strict Boundaries)\n' + restrict + '\n' : ''}
+`,
+        HEARTBEAT_MD: `# 💓 Heartbeat Configuration
+
+Cron / Pulse Frequency: 5m
+Pings should test data integrity and ensure session connectivity using:
+\`curl -I -H "X-API-Key: ${key}" ${url}/openapi/forms\`
+`,
+        BOOTSTRAP_MD: `# 🚀 Bootstrapping Protocol
+
+1. Initialize Workspace: \`cd ${dir}\`
+2. Validate Variables: Check that \`X-API-Key\` is loaded correctly.
+3. Establish Handshake: Connect to \`${url}/openapi/forms\` and list schemas.
+4. If successful, print \`BOOTSTRAP OK\` and enter READY state.
+`,
+        MEMORY_MD: `# 📂 Operational Memory Stash
+
+## Permanent Knowledge Base
+- Knows upstream base URL: \`${url}\`
+- Secured with Token: \`${key}\`
+- Root logic path: \`${dir}\`
+
+## 平台使用方式与探活方法 (Platform Guide)
+- 接口认证: 请求此平台的所有数据都必须在 HTTP Header 注入: \`X-API-Key: ${key}\`
+- 握手(服务发现): 使用 \`GET ${url}/openapi/forms\` 获取你有权访问的业务表列表和元数据。不要盲猜字段！
+- 表单格式: 使用 \`GET ${url}/openapi/forms/{schema}\` 探测某特定表的准确字段字典（Field definition）。
+- 数据拉取: 使用 \`GET ${url}/openapi/forms/{schema}/data\` 查询核心数据。
+
+## Short-term Stash (Ephemeral)
+_Leave blank for runtime logic. Store schema codes here once acquired._
+`
+      };
+
+      for(const k in docs) {
+        document.getElementById(k + '_RAW').innerText = docs[k];
+      }
+      showToast('所有配置已成功生成！');
+    }
+  </script>
+</body>
+</html>

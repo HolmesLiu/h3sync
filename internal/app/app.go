@@ -51,6 +51,7 @@ func Run(ctx context.Context) error {
 	syncSvc := service.NewSyncService(formRepo, h3Client, mssqlBackupSvc, cfg.SyncPageSize, log)
 	apiKeySvc := service.NewAPIKeyService(formRepo)
 	querySvc := service.NewQueryService(formRepo)
+	agentRepo := repository.NewAgentRepo(database)
 
 	r := gin.Default()
 	r.LoadHTMLGlob("web/templates/*")
@@ -62,6 +63,7 @@ func Run(ctx context.Context) error {
 	admin.RegisterRoutes(r, admin.Handlers{
 		AdminService:       adminSvc,
 		FormRepo:           formRepo,
+		AgentRepo:          agentRepo,
 		SyncService:        syncSvc,
 		MSSQLBackupService: mssqlBackupSvc,
 		APIKeyService:      apiKeySvc,
