@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>h3sync 企业资料内容</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <script src="/static/admin.js"></script>
+  <style>
+    .data-table th { white-space: nowrap; font-size: 0.7rem; }
+    .data-table td { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8125rem; }
+    .data-table td:hover { white-space: normal; overflow: visible; word-break: break-word; background: #fff; position: relative; z-index: 10; box-shadow: var(--shadow); }
+    .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+    .filter-item { display: flex; flex-direction: column; gap: 4px; }
+    .filter-item label { font-size: 0.75rem; color: var(--text-muted); }
+    .filter-item select, .filter-item input { height: 38px; min-width: 120px; }
+    .stats-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; font-size: 0.875rem; color: var(--text-muted); flex-wrap: wrap; }
+  </style>
+  <script>
+    function safeSet(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.value = value || '';
+    }
+    function fillRowForm(fields) {
+      fields = fields || {};
+      {{range .fieldViews}}safeSet('field_{{.Code}}', fields['{{.Code}}'] || '');{{end}}
+    }
+    window.openCreateRowModal = function() {
+      var form = document.getElementById('rowForm');
+      if (form) form.reset();
+      safeSet('rowObjectID', '');
+      fillRowForm({});
+      var title = document.getElementById('rowModalTitle');
+      if (title) title.innerText = '新增内容';
+      if (window.openModal) window.openModal('rowMask');
+    };
+    window.openEditRowModal = function(btn) {
+      var raw = btn.getAttribute('data-fields') || '{}';
+      var fields = {};
+      try {
+        fields = JSON.parse(raw);
+      } catch (e) {
+        fields = {};
+      }
+      safeSet('rowObjectID', btn.getAttribute('data-object-id') || '');
+      fillRowForm(fields);
+      var title = document.getElementById('rowModalTitle');
+      if (title) title.innerText = '编辑内容';
+      if (window.openModal) window.openModal('rowMask');
+    };
+  </script>
+</head>
+<body>
+  <div id="rowMask" class="modal-overlay">
+    <div class="modal-content" style="width:min(900px, 92vw);">
+      <div class="card-title">
+        <span id="rowModalTitle">新增内容</span>
+        <button onclick="closeModal('rowMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button>
+      </div>
+      <form method="post" action="{{.dataBase}}/rows/save" id="rowForm">
+        <div class="form-group">
+          <label>对象 ID</label>
+          <input id="rowObjectID" name="object_id" placeholder="留空则自动生成" />
+        </div>
+        <div class="grid-cols-2">
+          {{range .fieldViews}}
+          <div class="form-group">
+            <label>{{.Label}}<span style="font-size:0.75rem;color:var(--text-muted);"> / {{.Code}}</span></label>
+            <textarea id="field_{{.Code}}" name="field_{{.Code}}" rows="3"></textarea>
+          </div>
+          {{end}}
+        </div>
+        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" class="btn" onclick="closeModal('rowMask')">取消</button>
+          <button type="submit" class="btn btn-primary">保存内容</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-container">
+    {{template "sidebar" .}}
+    <div class="mobile-header">
+      <div style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
+
+    <main class="main-content">
+      <div class="card">
+        <div class="card-title">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <a href="{{.backURL}}" class="btn-icon" title="返回列表"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></a>
+            <span>{{.form.DisplayName}}</span>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn" type="button" onclick="openCreateRowModal()">新增内容</button>
+            <a href="{{.dataBase}}/export?keyword={{.keyword}}&field={{.field}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn btn-primary">导出 CSV</a>
+          </div>
+        </div>
+
+        <div class="stats-bar">
+          <span>来源文件: <strong>{{.meta.SourceFilename}}</strong></span>
+          {{if .meta.SheetName}}<span>Sheet: <strong>{{.meta.SheetName}}</strong></span>{{end}}
+          <span>总记录数: <strong>{{.totalCount}}</strong></span>
+          <span>当前页: <strong>{{.page}} / {{.totalPages}}</strong></span>
+        </div>
+
+        {{if .message}}<div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">{{.message}}</div>{{end}}
+
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-title"><span>字段设置</span></div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>字段代码</th>
+                  <th>显示名称</th>
+                  <th>备注</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{range .fieldViews}}
+                <tr>
+                  <td><code>{{.Code}}</code></td>
+                  <td>
+                    <form method="post" action="/admin/forms/{{$.schema}}/fields" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      <input type="hidden" name="field_code" value="{{.Code}}" />
+                      <input type="hidden" name="original_type" value="text" />
+                      <input type="hidden" name="storage_type" value="text" />
+                      <input type="hidden" name="show_in_admin" value="on" />
+                      <input name="field_name" value="{{.Label}}" placeholder="字段显示名" style="min-width:180px;" />
+                  </td>
+                  <td>
+                      <input name="chinese_remark" value="{{.ChineseRemark}}" placeholder="字段说明" style="min-width:220px;" />
+                  </td>
+                  <td>
+                      <button type="submit" class="btn btn-sm">保存字段</button>
+                    </form>
+                  </td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-title"><span>导入数据</span></div>
+          <form method="post" action="{{.dataBase}}/import" enctype="multipart/form-data" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+            <div class="form-group" style="min-width:260px;">
+              <label>导入文件</label>
+              <input type="file" name="file" accept="{{.importTypes}}" required />
+            </div>
+            <button type="submit" class="btn btn-primary">校验并导入</button>
+          </form>
+          <div style="margin-top:8px; font-size:0.8125rem; color:var(--text-muted);">
+            仅支持结构化文件追加导入。导入前会校验字段数量、字段顺序与当前表单字段格式是否一致，不一致将拒绝导入。
+          </div>
+        </div>
+
+        <form method="get" action="{{.dataBase}}/data" class="filter-bar">
+          <div class="filter-item">
+            <label>筛选字段</label>
+            <select name="field">
+              <option value="__all__">全部字段</option>
+              {{range .fieldViews}}<option value="{{.Code}}" {{if eq $.field .Code}}selected{{end}}>{{.Label}} / {{.Code}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-item" style="flex:1;">
+            <label>搜索关键字</label>
+            <input name="keyword" value="{{.keyword}}" placeholder="支持模糊匹配" />
+          </div>
+          <div class="filter-item">
+            <label>排序字段</label>
+            <select name="sort_field">
+              {{range .sortFields}}<option value="{{.Value}}" {{if eq $.sortField .Value}}selected{{end}}>{{.Label}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>顺序</label>
+            <select name="sort_order">
+              <option value="DESC" {{if eq .sortOrder "DESC"}}selected{{end}}>降序</option>
+              <option value="ASC" {{if eq .sortOrder "ASC"}}selected{{end}}>升序</option>
+            </select>
+          </div>
+          <div class="filter-item">
+            <label>每页数量</label>
+            <select name="size">
+              <option value="20" {{if eq .size 20}}selected{{end}}>20</option>
+              <option value="50" {{if eq .size 50}}selected{{end}}>50</option>
+              <option value="100" {{if eq .size 100}}selected{{end}}>100</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary" style="height:38px;">应用筛选</button>
+        </form>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ObjectID</th>
+                <th>更新时间</th>
+                {{range .fieldViews}}<th>{{.Label}}<div style="font-size:0.7rem;color:var(--text-muted);font-weight:400;">{{.Code}}</div></th>{{end}}
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range $row := .editRows}}
+              <tr>
+                <td><code style="font-size:0.75rem;">{{$row.ObjectID}}</code></td>
+                <td style="color:var(--text-muted);">{{$row.ModifiedTime}}</td>
+                {{range $field := $.fieldViews}}<td title="{{index $row.Fields $field.Code}}">{{index $row.Fields $field.Code}}</td>{{end}}
+                <td>
+                  <div class="action-icon-group">
+                    <button class="btn-icon" type="button" data-object-id="{{$row.ObjectID}}" data-fields="{{$row.FieldsJSON}}" onclick="openEditRowModal(this)" title="编辑内容"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg></button>
+                    <form method="post" action="{{$.dataBase}}/rows/{{$row.ObjectID}}/delete" onsubmit="return confirm('确定删除这条内容吗？');"><button class="btn-icon danger" type="submit" title="删除内容"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
+                  </div>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:32px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div style="display:flex; gap:8px;">
+            {{if .hasPrev}}<a href="{{.dataBase}}/data?page={{.prevPage}}&size={{.size}}&field={{.field}}&keyword={{.keyword}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn">上一页</a>{{end}}
+            <div style="display:flex; gap:4px;">{{range .pages}}<a class="btn btn-sm {{if eq $.page .}}btn-primary{{end}}" href="{{$.dataBase}}/data?page={{.}}&size={{$.size}}&field={{$.field}}&keyword={{$.keyword}}&sort_field={{$.sortField}}&sort_order={{$.sortOrder}}">{{.}}</a>{{end}}</div>
+            {{if .hasNext}}<a href="{{.dataBase}}/data?page={{.nextPage}}&size={{.size}}&field={{.field}}&keyword={{.keyword}}&sort_field={{.sortField}}&sort_order={{.sortOrder}}" class="btn">下一页</a>{{end}}
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

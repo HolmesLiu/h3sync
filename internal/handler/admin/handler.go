@@ -2,10 +2,12 @@ package admin
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"sort"
@@ -28,6 +30,7 @@ type Handlers struct {
 	AgentRepo          *repository.AgentRepo
 	SyncService        *service.SyncService
 	MSSQLBackupService *service.MSSQLBackupService
+	EnterpriseService  *service.EnterpriseLibraryService
 	APIKeyService      *service.APIKeyService
 	Logger             *zap.Logger
 }
@@ -78,12 +81,14 @@ type apiKeyRowView struct {
 	ExpiresInput string
 }
 
+const loginCaptchaAnswerKey = "login_captcha_answer"
+
 func RegisterRoutes(r *gin.Engine, h Handlers) {
 	r.GET("/admin/login", h.loginPage)
 	r.POST("/admin/login", h.loginPost)
 
 	admin := r.Group("/admin")
-	admin.Use(middleware.RequireAdminLogin())
+	admin.Use(middleware.RequireAdminLogin(h.AdminService.IsActiveUsername))
 	admin.GET("", h.dashboard)
 	admin.GET("/forms", h.formsPage)
 	admin.POST("/forms", h.saveForm)
@@ -100,6 +105,15 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.POST("/mssql/forms/:schema/delete", h.deleteMSSQLForm)
 	admin.GET("/mssql/forms/:schema/data", h.formDataPage)
 	admin.GET("/mssql/forms/:schema/export", h.exportFormDataCSV)
+	admin.GET("/enterprise/forms", h.enterpriseFormsPage)
+	admin.POST("/enterprise/forms/upload", h.uploadEnterpriseForm)
+	admin.POST("/enterprise/forms/:schema/update", h.updateEnterpriseForm)
+	admin.POST("/enterprise/forms/:schema/delete", h.deleteEnterpriseForm)
+	admin.GET("/enterprise/forms/:schema/data", h.enterpriseFormDataPage)
+	admin.GET("/enterprise/forms/:schema/export", h.exportFormDataCSV)
+	admin.POST("/enterprise/forms/:schema/rows/save", h.saveEnterpriseRow)
+	admin.POST("/enterprise/forms/:schema/import", h.importEnterpriseRows)
+	admin.POST("/enterprise/forms/:schema/rows/:objectID/delete", h.deleteEnterpriseRow)
 	admin.POST("/forms/:schema/fields", h.saveFieldRemark)
 	admin.GET("/apikeys", h.apiKeysPage)
 	admin.POST("/apikeys", h.createAPIKey)
@@ -118,21 +132,60 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 }
 
 func (h Handlers) loginPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "login.tmpl", gin.H{"title": "h3sync admin"})
+	h.renderLoginPage(c, http.StatusOK, "", "")
 }
 
 func (h Handlers) loginPost(c *gin.Context) {
-	username := c.PostForm("username")
+	username := strings.TrimSpace(c.PostForm("username"))
 	password := c.PostForm("password")
-	_, err := h.AdminService.Login(username, password)
-	if err != nil {
-		c.HTML(http.StatusUnauthorized, "login.tmpl", gin.H{"error": "用户名或密码错误"})
+	captcha := strings.TrimSpace(c.PostForm("captcha"))
+	sess := sessions.Default(c)
+	expected := strings.TrimSpace(fmt.Sprintf("%v", sess.Get(loginCaptchaAnswerKey)))
+	sess.Delete(loginCaptchaAnswerKey)
+	_ = sess.Save()
+	if expected == "" || !strings.EqualFold(expected, captcha) {
+		h.renderLoginPage(c, http.StatusUnauthorized, "验证码错误", username)
 		return
 	}
-	sess := sessions.Default(c)
+
+	_, err := h.AdminService.Login(username, password)
+	if err != nil {
+		h.renderLoginPage(c, http.StatusUnauthorized, "用户名或密码错误", username)
+		return
+	}
 	sess.Set("admin_user", username)
 	_ = sess.Save()
 	c.Redirect(http.StatusFound, "/admin")
+}
+
+func (h Handlers) renderLoginPage(c *gin.Context, status int, errMsg string, username string) {
+	question, answer := generateLoginCaptcha()
+	sess := sessions.Default(c)
+	sess.Set(loginCaptchaAnswerKey, answer)
+	_ = sess.Save()
+	c.HTML(status, "login.tmpl", gin.H{
+		"title":           "h3sync admin",
+		"error":           errMsg,
+		"username":        username,
+		"captchaQuestion": question,
+	})
+}
+
+func generateLoginCaptcha() (string, string) {
+	left := randomCaptchaNumber(1, 9)
+	right := randomCaptchaNumber(1, 9)
+	return fmt.Sprintf("%d + %d = ?", left, right), strconv.Itoa(left + right)
+}
+
+func randomCaptchaNumber(min int64, max int64) int {
+	if max <= min {
+		return int(min)
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(max-min+1))
+	if err != nil {
+		return int(min)
+	}
+	return int(min + n.Int64())
 }
 
 func (h Handlers) dashboard(c *gin.Context) {
@@ -703,6 +756,11 @@ func (h Handlers) saveFieldRemark(c *gin.Context) {
 	}
 	if err := h.FormRepo.UpsertFieldRemark(form.ID, field); err != nil {
 		c.String(http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.EqualFold(form.SourceType, "ENTERPRISE_LIBRARY") {
+		h.audit(c, "FIELD_REMARK_UPSERT", "field", field.FieldCode, "update field remark")
+		c.Redirect(http.StatusFound, "/admin/enterprise/forms/"+schema+"/data?msg=字段设置已保存")
 		return
 	}
 	h.audit(c, "FIELD_REMARK_UPSERT", "field", field.FieldCode, "update field remark")

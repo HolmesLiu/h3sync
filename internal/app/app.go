@@ -48,6 +48,7 @@ func Run(ctx context.Context) error {
 
 	h3Client := h3.NewClient(cfg.H3BaseURL, cfg.H3EngineCode, cfg.H3EngineSecret, cfg.RequestTimeout)
 	mssqlBackupSvc := service.NewMSSQLBackupService(formRepo, log)
+	enterpriseSvc := service.NewEnterpriseLibraryService(formRepo, log)
 	syncSvc := service.NewSyncService(formRepo, h3Client, mssqlBackupSvc, cfg.SyncPageSize, log)
 	apiKeySvc := service.NewAPIKeyService(formRepo)
 	querySvc := service.NewQueryService(formRepo)
@@ -66,6 +67,7 @@ func Run(ctx context.Context) error {
 		AgentRepo:          agentRepo,
 		SyncService:        syncSvc,
 		MSSQLBackupService: mssqlBackupSvc,
+		EnterpriseService:  enterpriseSvc,
 		APIKeyService:      apiKeySvc,
 		Logger:             log,
 	})

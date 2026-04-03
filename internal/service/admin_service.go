@@ -38,6 +38,10 @@ func (s *AdminService) Login(username, password string) (int64, error) {
 	return id, nil
 }
 
+func (s *AdminService) IsActiveUsername(username string) (bool, error) {
+	return s.users.IsActiveUsername(username)
+}
+
 func (s *AdminService) Audit(log models.AdminAuditLog) {
 	_ = s.users.AddAuditLog(log)
 }

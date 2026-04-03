@@ -52,6 +52,43 @@ type MSSQLFormListView struct {
 	LastScannedAt       *time.Time `db:"last_scanned_at"`
 }
 
+type EnterpriseLibraryForm struct {
+	FormID         int64      `db:"form_id"`
+	SourceFilename string     `db:"source_filename"`
+	StoredFilename string     `db:"stored_filename"`
+	SheetName      string     `db:"sheet_name"`
+	FileExt        string     `db:"file_ext"`
+	MimeType       string     `db:"mime_type"`
+	FileSize       int64      `db:"file_size"`
+	SourceChecksum string     `db:"source_checksum"`
+	FileChecksum   string     `db:"file_checksum"`
+	FilePath       string     `db:"file_path"`
+	ParseStatus    string     `db:"parse_status"`
+	ParseMessage   string     `db:"parse_message"`
+	RowCount       int        `db:"row_count"`
+	ParsedAt       *time.Time `db:"parsed_at"`
+}
+
+type EnterpriseLibraryListView struct {
+	FormID         int64      `db:"form_id"`
+	SchemaCode     string     `db:"schema_code"`
+	GroupName      string     `db:"group_name"`
+	DisplayName    string     `db:"display_name"`
+	ChineseRemark  string     `db:"chinese_remark"`
+	SourceFilename string     `db:"source_filename"`
+	SheetName      string     `db:"sheet_name"`
+	FileExt        string     `db:"file_ext"`
+	MimeType       string     `db:"mime_type"`
+	FileSize       int64      `db:"file_size"`
+	SourceChecksum string     `db:"source_checksum"`
+	FileChecksum   string     `db:"file_checksum"`
+	ParseStatus    string     `db:"parse_status"`
+	ParseMessage   string     `db:"parse_message"`
+	RowCount       int        `db:"row_count"`
+	LastSyncAt     *time.Time `db:"last_sync_at"`
+	ParsedAt       *time.Time `db:"parsed_at"`
+}
+
 type FormFieldRegistry struct {
 	ID            int64  `db:"id"`
 	FormID        int64  `db:"form_id"`

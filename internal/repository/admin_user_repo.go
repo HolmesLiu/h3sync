@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/HolmesLiu/h3sync/internal/models"
@@ -16,6 +17,18 @@ func NewAdminUserRepo(db *sqlx.DB) *AdminUserRepo { return &AdminUserRepo{db: db
 func (r *AdminUserRepo) GetByUsername(username string) (id int64, passwordHash string, err error) {
 	err = r.db.QueryRow(`SELECT id, password_hash FROM admin_users WHERE username=$1 AND is_active=true`, username).Scan(&id, &passwordHash)
 	return
+}
+
+func (r *AdminUserRepo) IsActiveUsername(username string) (bool, error) {
+	var exists int
+	err := r.db.QueryRow(`SELECT 1 FROM admin_users WHERE username=$1 AND is_active=true`, username).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return exists == 1, nil
 }
 
 func (r *AdminUserRepo) EnsureBootstrapUser(username, passwordHash string) error {
