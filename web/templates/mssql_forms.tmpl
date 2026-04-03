@@ -108,17 +108,34 @@
 
       {{if .message}}<div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">{{.message}}</div>{{end}}
 
-      <div class="card">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;">
+        {{range .groups}}<a href="#{{.ID | urlquery}}" style="text-decoration: none; color: var(--text-muted); background: #fff; border: 1px solid var(--border-color); padding: 4px 12px; border-radius: 20px; font-size: 0.8125rem;" onclick="focusGroup('{{.ID}}');return false;"># {{.Title}}</a>{{end}}
+      </div>
+
+      {{range .groups}}
+      <details id="{{.ID}}" {{if eq $.focus .ID}}open{{end}} style="background:#fff; border:1px solid var(--border-color); border-radius:12px; margin-bottom:16px; box-shadow:var(--shadow);">
+        <summary style="padding:16px; cursor:pointer; font-weight:700; display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            <span>{{.Title}}</span>
+            <span class="badge badge-info">{{len .Forms}}</span>
+          </div>
+          <form method="post" action="/admin/forms/groups/rename" onsubmit="event.stopPropagation();" style="display:flex; gap:8px;">
+            <input type="hidden" name="source_type" value="MSSQL_BACKUP" />
+            <input type="hidden" name="old_group_name" value="{{.Title}}" />
+            <input name="new_group_name" placeholder="重命名" style="width:100px; height:30px; font-size:0.75rem;" />
+            <button class="btn btn-sm">保存</button>
+          </form>
+        </summary>
         <div class="table-container">
           <table>
-            <thead><tr><th>SchemaCode</th><th>原始表名</th><th>业务名称</th><th>分组</th><th>同步方式</th><th>记录数</th><th>上一次同步</th><th>操作</th></tr></thead>
+            <thead><tr><th>SchemaCode</th><th>原始表名</th><th>业务名称</th><th>同步方式</th><th>记录数</th><th>上一次同步</th><th>操作</th></tr></thead>
             <tbody>
-              {{range .rows}}
+              {{range .Forms}}
               <tr>
                 <td><code>{{.SchemaCode}}</code></td>
                 <td style="font-size:0.8125rem; color:var(--text-muted);">{{.SourceFullName}}</td>
                 <td><strong>{{.DisplayName}}</strong></td>
-                <td><span class="badge badge-info">{{.GroupName}}</span></td>
                 <td>
                   <span class="badge {{if eq .SyncMethod "AUTO"}}badge-success{{else}}badge-info{{end}}">{{.SyncMethodLabel}}</span>
                   {{if eq .SyncMethod "AUTO"}}<span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">{{.SyncIntervalMinutes}}分钟/次</span>{{end}}
@@ -128,8 +145,9 @@
                 <td>
                   <div class="action-icon-group">
                     <button class="btn-icon" onclick="openBindModal(this)" data-schema="{{.SchemaCode}}" data-name="{{.DisplayName}}" data-group="{{.GroupName}}" data-remark="{{.ChineseRemark}}" data-method="{{.SyncMethod}}" data-interval="{{.SyncIntervalMinutes}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg></button>
-                    <a href="/admin/mssql/forms/{{.SchemaCode}}/data" class="btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/></svg></a>
+                    <a href="/admin/mssql/forms/{{.SchemaCode}}/data" class="btn-icon" title="查看数据"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/></svg></a>
                     <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/sync"><button class="btn-icon" type="submit" title="手动同步"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button></form>
+                    <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/delete" onsubmit="return confirm('警告：永久删除该 MSSQL 表单配置及所有已同步的数据。\n\n操作不可逆，确定删除？');"><button class="btn-icon danger" type="submit" title="删除表单"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
                   </div>
                 </td>
               </tr>
@@ -137,7 +155,8 @@
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
+      {{end}}
 
       <div class="card" style="margin-top: 32px;">
         <h3 class="card-title">备份库同步审计</h3>

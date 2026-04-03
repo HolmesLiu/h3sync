@@ -162,6 +162,9 @@
     window.initPermMap = function(jsonStr) {
       try { permMap = JSON.parse(jsonStr || '{}'); } catch(e) { console.error(e); }
     };
+    window.toggleGroupChecks = function(groupId, isChecked) {
+      document.querySelectorAll('.perm-list[data-group="' + groupId + '"] input[type="checkbox"]').forEach(cb => cb.checked = isChecked);
+    };
     window.openEditModal = function(btn) {
       const id = btn.dataset.id;
       document.getElementById('editForm').action = '/admin/apikeys/'+id+'/update';
@@ -501,7 +504,13 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
            <div style="max-height: 300px; overflow-y:auto; border:1px solid #e2e8f0; padding:4px; border-radius:12px; background:#fcfcfc;">
              {{range $gi, $group := .formGroups}}
              <details class="group-details" open>
-               <summary>{{$group.Title}}</summary>
+               <summary style="display:flex; justify-content:space-between; align-items:center;">
+                 <span>{{$group.Title}}</span>
+                 <div style="display:flex; gap:4px;">
+                   <button type="button" class="btn" style="padding: 2px 8px; font-size: 0.7rem;" onclick="toggleGroupChecks('g{{$gi}}', true); event.stopPropagation();">全选</button>
+                   <button type="button" class="btn" style="padding: 2px 8px; font-size: 0.7rem;" onclick="toggleGroupChecks('g{{$gi}}', false); event.stopPropagation();">取消全部</button>
+                 </div>
+               </summary>
                <div class="perm-list" data-mode="create" data-group="g{{$gi}}">
                  {{range $group.Forms}}
                  <label class="perm-item">
@@ -545,7 +554,13 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
            <div style="max-height: 300px; overflow-y:auto; border:1px solid #e2e8f0; padding:4px; border-radius:12px; background:#fcfcfc;">
              {{range $gi, $group := .formGroups}}
              <details class="group-details" open>
-               <summary>{{$group.Title}}</summary>
+               <summary style="display:flex; justify-content:space-between; align-items:center;">
+                 <span>{{$group.Title}}</span>
+                 <div style="display:flex; gap:4px;">
+                   <button type="button" class="btn" style="padding: 2px 8px; font-size: 0.7rem;" onclick="toggleGroupChecks('eg{{$gi}}', true); event.stopPropagation();">全选</button>
+                   <button type="button" class="btn" style="padding: 2px 8px; font-size: 0.7rem;" onclick="toggleGroupChecks('eg{{$gi}}', false); event.stopPropagation();">取消全部</button>
+                 </div>
+               </summary>
                <div class="perm-list" data-mode="edit" data-group="eg{{$gi}}">
                  {{range $group.Forms}}
                  <label class="perm-item">

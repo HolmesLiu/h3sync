@@ -124,6 +124,35 @@ func (s *MSSQLBackupService) DiscoverForms(ctx context.Context) (int, int, error
 	return created, updated, nil
 }
 
+func (s *MSSQLBackupService) DeleteSourceFiles(schemaCode string) error {
+	meta, err := s.repo.GetMSSQLMetaBySchema(schemaCode)
+	if err != nil {
+		return err
+	}
+	root, err := s.GetBackupRootPath()
+	if err != nil || root == "" {
+		return nil
+	}
+	files, err := discoverSQLFiles(root)
+	if err != nil {
+		return err
+	}
+	
+	deletedCount := 0
+	for _, f := range files {
+		if strings.EqualFold(f.FullName, meta.SourceFullName) {
+			if err := os.Remove(f.Path); err == nil {
+				deletedCount++
+				s.logger.Info("deleted mssql source tracking file", zap.String("path", f.Path))
+			} else {
+				s.logger.Warn("failed to delete mssql source file", zap.String("path", f.Path), zap.Error(err))
+			}
+		}
+	}
+	s.logger.Info("completed deletion of mssql source files", zap.String("schemaCode", schemaCode), zap.Int("count", deletedCount))
+	return nil
+}
+
 func (s *MSSQLBackupService) SyncForm(ctx context.Context, form models.FormRegistry) (int, error) {
 	_ = ctx
 	meta, err := s.repo.GetMSSQLMetaBySchema(form.SchemaCode)

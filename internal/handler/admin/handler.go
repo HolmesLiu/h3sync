@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,7 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.POST("/mssql/discover", h.discoverMSSQLForms)
 	admin.POST("/mssql/forms/:schema/bind", h.bindMSSQLForm)
 	admin.POST("/mssql/forms/:schema/sync", h.manualSyncMSSQL)
+	admin.POST("/mssql/forms/:schema/delete", h.deleteMSSQLForm)
 	admin.GET("/mssql/forms/:schema/data", h.formDataPage)
 	admin.GET("/mssql/forms/:schema/export", h.exportFormDataCSV)
 	admin.POST("/forms/:schema/fields", h.saveFieldRemark)
@@ -418,15 +420,22 @@ func (h Handlers) mssqlFormsPage(c *gin.Context) {
 	}
 	logPages := buildPages(logPage, totalPages)
 
+	groups := makeMSSQLGroups(rows)
+	focus := c.Query("focus")
+	if focus == "" && len(groups) > 0 {
+		focus = groups[0].ID
+	}
+
 	c.HTML(http.StatusOK, "mssql_forms.tmpl", gin.H{
 		"title":         "MSSQL表单管理",
-		"rows":          rows,
+		"groups":        groups,
 		"groupNames":    groupNames,
 		"rootPath":      rootPath,
 		"message":       c.Query("msg"),
 		"libraryAt":     formatMinutePtr(time.Now()),
 		"defaultGroup":  "MSSQL默认分组",
 		"logs":          logs,
+		"focus":         focus,
 		"logPage":       logPage,
 		"logSize":       logSize,
 		"logStatus":     logStatus,
@@ -521,6 +530,21 @@ func (h Handlers) manualSyncMSSQL(c *gin.Context) {
 	}
 	h.audit(c, "MSSQL_FORM_SYNC_MANUAL", "form", schema, "trigger manual sync")
 	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=手动同步已触发")
+}
+
+func (h Handlers) deleteMSSQLForm(c *gin.Context) {
+	schema := c.Param("schema")
+	
+	// Physically wipe tracked MSSQL discovery sql files first
+	_ = h.MSSQLBackupService.DeleteSourceFiles(schema)
+	
+	if err := h.FormRepo.DeleteBySchema(schema); err != nil {
+		h.Logger.Error("delete mssql form failed", zap.String("schema", schema), zap.Error(err))
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=删除失败，请查看日志")
+		return
+	}
+	h.audit(c, "MSSQL_FORM_DELETE", "mssql_form", schema, "delete mssql form config and synced data")
+	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=表单及源文件已删除")
 }
 
 func (h Handlers) formDataPage(c *gin.Context) {
@@ -1006,6 +1030,37 @@ func groupID(group string) string {
 	v = strings.ReplaceAll(v, " ", "-")
 	v = strings.ReplaceAll(v, "/", "-")
 	return "group-" + v
+}
+
+type mssqlGroupView struct {
+	ID    string
+	Title string
+	Forms []mssqlFormRowView
+}
+
+func makeMSSQLGroups(forms []mssqlFormRowView) []mssqlGroupView {
+	m := map[string][]mssqlFormRowView{}
+	for _, f := range forms {
+		grp := f.GroupName
+		if grp == "" {
+			grp = "MSSQL默认分组"
+		}
+		m[grp] = append(m[grp], f)
+	}
+	titles := make([]string, 0, len(m))
+	for k := range m {
+		titles = append(titles, k)
+	}
+	sort.Strings(titles)
+	res := make([]mssqlGroupView, 0, len(titles))
+	for _, t := range titles {
+		res = append(res, mssqlGroupView{
+			ID:    groupID(t),
+			Title: t,
+			Forms: m[t],
+		})
+	}
+	return res
 }
 
 func parseIntOr(v string, fallback int) int {
