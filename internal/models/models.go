@@ -139,3 +139,10 @@ type AgentRole struct {
 	Content   string    `db:"content"`
 	CreatedAt time.Time `db:"created_at"`
 }
+
+type AgentCoreRule struct {
+	ID        int64     `db:"id"`
+	Name      string    `db:"name"`
+	Content   string    `db:"content"`
+	CreatedAt time.Time `db:"created_at"`
+}

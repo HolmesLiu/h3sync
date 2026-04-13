@@ -57,6 +57,7 @@ func Run(ctx context.Context) error {
 	r := gin.Default()
 	r.LoadHTMLGlob("web/templates/*")
 	r.Static("/static", "web/static")
+	r.Static("/uploads", "uploads")
 
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
 	r.Use(sessions.Sessions("h3sync_session", store))

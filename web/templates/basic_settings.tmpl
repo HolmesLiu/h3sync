@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{.title}} - h3sync</title>
+  <link rel="stylesheet" href="/static/admin.css" />
+  <script src="/static/admin.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    {{template "sidebar" .}}
+
+    <div class="mobile-header">
+      <div class="mobile-site-brand" style="font-weight: 800; font-size: 1.2rem;">h3sync</div>
+      <button class="menu-toggle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    </div>
+
+    <main class="main-content">
+      <div class="card-title" style="margin-bottom:24px;">
+        <h2>基本设置</h2>
+      </div>
+
+      {{if .message}}
+      <div class="card" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1; padding:12px 24px; margin-bottom:24px;">
+        {{.message}}
+      </div>
+      {{end}}
+
+      <form method="post" action="/admin/basic-settings" enctype="multipart/form-data">
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-title"><span>企业信息</span></div>
+          <div class="grid-cols-2">
+            <div class="form-group">
+              <label>企业名称</label>
+              <input name="company_name" value="{{.config.CompanyName}}" />
+            </div>
+            <div class="form-group">
+              <label>联系方式</label>
+              <input name="company_phone" value="{{.config.CompanyPhone}}" />
+            </div>
+            <div class="form-group">
+              <label>企业邮箱</label>
+              <input name="company_email" value="{{.config.CompanyEmail}}" />
+            </div>
+            <div class="form-group">
+              <label>企业官网地址</label>
+              <input name="company_website" value="{{.config.CompanyWebsite}}" placeholder="例如：https://www.example.com" />
+            </div>
+            <div class="form-group">
+              <label>工作时间</label>
+              <input name="working_hours" value="{{.config.WorkingHours}}" placeholder="例如：周一至周五 09:00-18:00" />
+            </div>
+            <div class="form-group col-span-full">
+              <label>企业地址</label>
+              <input name="company_address" value="{{.config.CompanyAddress}}" />
+            </div>
+            <div class="form-group col-span-full">
+              <label>企业简介 / 说明</label>
+              <textarea name="company_intro" rows="4">{{.config.CompanyIntro}}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px;">
+          <div class="card-title"><span>平台网站信息</span></div>
+          <div class="grid-cols-2">
+            <div class="form-group">
+              <label>网站名称</label>
+              <input name="site_name" value="{{.config.SiteName}}" />
+            </div>
+            <div class="form-group">
+              <label>网站域名</label>
+              <input name="site_domain" value="{{.config.SiteDomain}}" />
+            </div>
+            <div class="form-group">
+              <label>备案号</label>
+              <input name="site_icp" value="{{.config.SiteICP}}" />
+            </div>
+            <div class="form-group">
+              <label>证书信息</label>
+              <input name="site_certificate" value="{{.config.SiteCertificate}}" placeholder="例如：SSL 证书编号 / HTTPS 配置说明" />
+            </div>
+            <div class="form-group">
+              <label>网站联系邮箱</label>
+              <input name="site_email" value="{{.config.SiteEmail}}" />
+            </div>
+            <div class="form-group">
+              <label>网站 Logo</label>
+              <input type="file" name="site_logo" accept=".png,.jpg,.jpeg,.webp,.svg" />
+            </div>
+            {{if .config.SiteLogoPath}}
+            <div class="form-group col-span-full">
+              <label>当前 Logo</label>
+              <div style="padding:12px; border:1px solid var(--border-color); border-radius:12px; background:#fff;">
+                <img src="{{.config.SiteLogoPath}}" alt="site logo" style="max-height:72px; max-width:220px; object-fit:contain;" />
+              </div>
+            </div>
+            {{end}}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>联动说明</span></div>
+          <p style="margin:0 0 10px; color:var(--text-muted); line-height:1.7;">
+            企业信息会联动到 Agent 生成中心，用作 Agent 的长期业务背景。
+          </p>
+          <p style="margin:0; color:var(--text-muted); line-height:1.7;">
+            平台网站信息仅用于当前平台自身配置与展示，不参与 Agent 生成内容。登录页和后台品牌信息会实时读取这里的设置。
+          </p>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:24px;">
+          <button type="submit" class="btn btn-primary">保存基本设置</button>
+        </div>
+      </form>
+    </main>
+  </div>
+</body>
+</html>

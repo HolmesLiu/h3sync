@@ -86,10 +86,13 @@ const loginCaptchaAnswerKey = "login_captcha_answer"
 func RegisterRoutes(r *gin.Engine, h Handlers) {
 	r.GET("/admin/login", h.loginPage)
 	r.POST("/admin/login", h.loginPost)
+	r.GET("/admin/site-profile", h.siteProfile)
 
 	admin := r.Group("/admin")
 	admin.Use(middleware.RequireAdminLogin(h.AdminService.IsActiveUsername))
 	admin.GET("", h.dashboard)
+	admin.GET("/basic-settings", h.basicSettingsPage)
+	admin.POST("/basic-settings", h.saveBasicSettings)
 	admin.GET("/forms", h.formsPage)
 	admin.POST("/forms", h.saveForm)
 	admin.POST("/forms/groups/rename", h.renameGroup)
@@ -128,6 +131,8 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.GET("/agent-gen", h.agentGenPage)
 	admin.POST("/agent-gen/roles", h.createAgentRole)
 	admin.POST("/agent-gen/roles/:id/delete", h.deleteAgentRole)
+	admin.POST("/agent-gen/core-rules", h.createAgentCoreRule)
+	admin.POST("/agent-gen/core-rules/:id/delete", h.deleteAgentCoreRule)
 	admin.POST("/logout", h.logout)
 }
 

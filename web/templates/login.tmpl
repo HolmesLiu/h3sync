@@ -30,6 +30,16 @@
       text-align: center;
       margin-bottom: 32px;
     }
+    .site-logo-wrap {
+      display: none;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .site-logo-wrap img {
+      max-height: 56px;
+      max-width: 180px;
+      object-fit: contain;
+    }
     .h3sync-logo {
       font-size: 2rem;
       font-weight: 800;
@@ -52,8 +62,11 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <div class="h3sync-logo">h3sync</div>
-        <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 8px;">瑞普生物数据同步管理后台</p>
+        <div class="site-logo-wrap" id="loginSiteLogoWrap">
+          <img id="loginSiteLogo" src="" alt="site logo" />
+        </div>
+        <div class="h3sync-logo" id="loginSiteName">h3sync</div>
+        <p id="loginSiteSubTitle" style="color: var(--text-muted); font-size: 0.875rem; margin-top: 8px;">平台管理后台</p>
       </div>
 
       {{if .error}}
@@ -82,9 +95,34 @@
         </div>
       </form>
     </div>
-    <p style="text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 24px;">
-      &copy; 2026 h3sync 系统管理组件. All rights reserved.
+    <p id="loginSiteFooter" style="text-align: center; color: #64748b; font-size: 0.75rem; margin-top: 24px;">
+      &copy; 2026 h3sync. All rights reserved.
     </p>
   </div>
+
+  <script>
+    async function loadSiteProfile() {
+      try {
+        const res = await fetch('/admin/site-profile', { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.site_name) {
+          document.getElementById('loginSiteName').textContent = data.site_name;
+          document.getElementById('loginSiteSubTitle').textContent = `${data.site_name} 管理后台`;
+          document.getElementById('loginSiteFooter').innerHTML = `&copy; 2026 ${data.site_name}. All rights reserved.`;
+          document.title = `${data.site_name} 管理后台登录`;
+        }
+        if (data.site_logo_path) {
+          const wrap = document.getElementById('loginSiteLogoWrap');
+          const img = document.getElementById('loginSiteLogo');
+          img.src = data.site_logo_path;
+          wrap.style.display = 'flex';
+        }
+      } catch (err) {
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadSiteProfile);
+  </script>
 </body>
 </html>
