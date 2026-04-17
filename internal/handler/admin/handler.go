@@ -396,6 +396,7 @@ func (h Handlers) deleteForm(c *gin.Context) {
 }
 
 func (h Handlers) mssqlFormsPage(c *gin.Context) {
+	_ = h.FormRepo.MarkTimedOutRunningSyncLogsBySource("MSSQL_BACKUP", time.Now().Add(-2*time.Hour).UTC(), "sync process did not finish normally")
 	rootPath, _ := h.FormRepo.GetSystemSetting("mssql_backup_root_path")
 	forms, err := h.FormRepo.ListMSSQLForms()
 	if err != nil {
@@ -632,14 +633,30 @@ func (h Handlers) fullSyncMSSQL(c *gin.Context) {
 		return
 	}
 
+	form, err := h.FormRepo.GetBySchema(schema)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=表单不存在")
+		return
+	}
+	logID, err := h.FormRepo.InsertSyncLog(form.ID, "MANUAL")
+	if err != nil {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=创建同步审计日志失败")
+		return
+	}
+	cursorBefore := "FULL_SYNC"
 	runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	count, err := h.MSSQLBackupService.FullSyncToday(runCtx, schema)
 	if err != nil {
 		h.Logger.Error("full mssql sync failed", zap.String("schema", schema), zap.Error(err))
+		msg := err.Error()
+		cursorAfter := "FULL_SYNC_FAILED"
+		_ = h.FormRepo.FinishSyncLog(logID, "FAILED", count, &msg, &cursorBefore, &cursorAfter)
 		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=全量更新失败，请查看日志")
 		return
 	}
+	cursorAfter := "FULL_SYNC_DONE"
+	_ = h.FormRepo.FinishSyncLog(logID, "SUCCESS", count, nil, &cursorBefore, &cursorAfter)
 	h.audit(c, "MSSQL_FORM_SYNC_FULL", "form", schema, fmt.Sprintf("trigger full sync rows=%d", count))
 	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg="+fmt.Sprintf("全量更新完成，同步 %d 行", count))
 }

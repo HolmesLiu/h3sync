@@ -441,6 +441,21 @@ func (r *FormRepo) FinishSyncLog(logID int64, status string, count int, errMsg *
 	return err
 }
 
+func (r *FormRepo) MarkTimedOutRunningSyncLogsBySource(sourceType string, before time.Time, reason string) error {
+	_, err := r.db.Exec(`
+	UPDATE sync_logs l
+	SET status='FAILED',
+	    error_message=$3,
+	    finished_at=now()
+	FROM form_registry fr
+	WHERE fr.id = l.form_id
+	  AND fr.source_type = $1
+	  AND l.status = 'RUNNING'
+	  AND l.started_at < $2
+	`, sourceType, before, reason)
+	return err
+}
+
 func (r *FormRepo) EnsureBizTable(schemaCode string, columns []string) error {
 	tbl := BizTableName(schemaCode)
 	baseSQL := fmt.Sprintf(`
