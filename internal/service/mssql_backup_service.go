@@ -218,6 +218,107 @@ func (s *MSSQLBackupService) SyncForm(ctx context.Context, form models.FormRegis
 	return totalRows, nil
 }
 
+func (s *MSSQLBackupService) HasTodayFullFile(schemaCode string) (bool, error) {
+	meta, err := s.repo.GetMSSQLMetaBySchema(schemaCode)
+	if err != nil {
+		return false, err
+	}
+	root, err := s.GetBackupRootPath()
+	if err != nil {
+		return false, err
+	}
+	if root == "" {
+		return false, nil
+	}
+	files, err := discoverSQLFiles(root)
+	if err != nil {
+		return false, err
+	}
+	today := time.Now().In(time.Local)
+	for _, f := range files {
+		if !strings.EqualFold(f.FullName, meta.SourceFullName) {
+			continue
+		}
+		if !strings.EqualFold(f.Mode, "FULL") {
+			continue
+		}
+		ft := f.FileTime.In(time.Local)
+		if ft.Year() == today.Year() && ft.Month() == today.Month() && ft.Day() == today.Day() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *MSSQLBackupService) FullSyncToday(ctx context.Context, schemaCode string) (int, error) {
+	_ = ctx
+	form, err := s.repo.GetBySchema(schemaCode)
+	if err != nil {
+		return 0, err
+	}
+	meta, err := s.repo.GetMSSQLMetaBySchema(schemaCode)
+	if err != nil {
+		return 0, err
+	}
+	root, err := s.GetBackupRootPath()
+	if err != nil {
+		return 0, err
+	}
+	if root == "" {
+		return 0, fmt.Errorf("请先配置表单库路径")
+	}
+	files, err := discoverSQLFiles(root)
+	if err != nil {
+		return 0, err
+	}
+	today := time.Now().In(time.Local)
+	fullFiles := make([]mssqlSQLFile, 0)
+	for _, f := range files {
+		if !strings.EqualFold(f.FullName, meta.SourceFullName) {
+			continue
+		}
+		if !strings.EqualFold(f.Mode, "FULL") {
+			continue
+		}
+		ft := f.FileTime.In(time.Local)
+		if ft.Year() == today.Year() && ft.Month() == today.Month() && ft.Day() == today.Day() {
+			fullFiles = append(fullFiles, f)
+		}
+	}
+	if len(fullFiles) == 0 {
+		return 0, fmt.Errorf("当天目录下没有该表单的FULL文件")
+	}
+	sort.Slice(fullFiles, func(i, j int) bool {
+		if fullFiles[i].FileTime.Equal(fullFiles[j].FileTime) {
+			return fullFiles[i].Path < fullFiles[j].Path
+		}
+		return fullFiles[i].FileTime.Before(fullFiles[j].FileTime)
+	})
+
+	if err := s.repo.ClearBizRows(schemaCode); err != nil {
+		return 0, err
+	}
+
+	totalRows := 0
+	for _, f := range fullFiles {
+		rowCount, _, err := s.importSQLFile(form, meta, f)
+		if err != nil {
+			return totalRows, fmt.Errorf("导入FULL文件失败 %s: %w", f.Name, err)
+		}
+		totalRows += rowCount
+		if err := s.repo.SetMSSQLLastProcessed(form.ID, f.Path, &f.FileTime); err != nil {
+			return totalRows, err
+		}
+	}
+	if err := s.repo.TouchMSSQLScannedAt(form.ID); err != nil {
+		return totalRows, err
+	}
+	if err := s.repo.TouchLastSync(form.ID); err != nil {
+		return totalRows, err
+	}
+	return totalRows, nil
+}
+
 func (s *MSSQLBackupService) importSQLFile(form models.FormRegistry, meta models.MSSQLFormRegistry, file mssqlSQLFile) (int, string, error) {
 	b, err := os.ReadFile(file.Path)
 	if err != nil {
@@ -307,14 +408,26 @@ func (s *MSSQLBackupService) importSQLFile(form models.FormRegistry, meta models
 	if incCol == "" {
 		incCol = "id"
 	}
+	uniqueKeyCol := strings.ToLower(strings.TrimSpace(meta.UniqueKeyColumn))
+	if meta.StockUpdateEnabled && uniqueKeyCol == "" {
+		return rowCount, checksum, fmt.Errorf("存量更新已开启但唯一字段未配置")
+	}
 
 	for i, row := range parsedRows {
-		objID := strings.TrimSpace(row[incCol])
-		if objID == "" {
-			objID = strings.TrimSpace(row["id"])
-		}
-		if objID == "" {
-			objID = fmt.Sprintf("%s#%d", file.Name, i+1)
+		objID := ""
+		if meta.StockUpdateEnabled {
+			objID = strings.TrimSpace(row[uniqueKeyCol])
+			if objID == "" {
+				return rowCount, checksum, fmt.Errorf("唯一字段 %s 缺失或为空", meta.UniqueKeyColumn)
+			}
+		} else {
+			objID = strings.TrimSpace(row[incCol])
+			if objID == "" {
+				objID = strings.TrimSpace(row["id"])
+			}
+			if objID == "" {
+				objID = fmt.Sprintf("%s#%d", file.Name, i+1)
+			}
 		}
 
 		modified := inferModifiedTime(row)

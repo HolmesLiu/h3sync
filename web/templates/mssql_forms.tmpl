@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>h3sync MSSQL表单管理</title>
+  <title>h3sync MSSQL 表单管理</title>
   <link rel="stylesheet" href="/static/admin.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
   <script src="/static/admin.js"></script>
@@ -12,49 +12,108 @@
     window.openBindModal = function(btn) {
       try {
         const d = btn.dataset;
-        const form = document.getElementById('bindForm'); if (form) form.action = '/admin/mssql/forms/' + (d.schema || '') + '/bind';
+        const form = document.getElementById('bindForm');
+        if (form) form.action = '/admin/mssql/forms/' + (d.schema || '') + '/bind';
         safeSetVal('bindName', d.name || '');
         safeSetVal('bindGroup', d.group || '');
         safeSetVal('bindRemark', d.remark || '');
         safeSetVal('bindMethod', d.method || 'MANUAL');
         safeSetVal('bindInterval', d.interval || '60');
-        // NOTE: 根据方式切换周期输入框的启用状态
-        var intervalInput = document.getElementById('bindInterval');
+        safeSetVal('bindUniqueKeyColumn', d.uniquekey || '');
+        const stockUpdate = document.getElementById('bindStockUpdate');
+        if (stockUpdate) stockUpdate.checked = (d.stockupdate === 'true');
+        const intervalInput = document.getElementById('bindInterval');
         if (intervalInput) intervalInput.disabled = ((d.method || 'MANUAL') !== 'AUTO');
+        window.toggleUniqueKeyInput();
         if (window.openModal) window.openModal('bindMask');
-      } catch(e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+      }
     };
     window.toggleIntervalInput = function(sel) {
-      var intervalInput = document.getElementById('bindInterval');
+      const intervalInput = document.getElementById('bindInterval');
       if (intervalInput) intervalInput.disabled = (sel.value !== 'AUTO');
+    };
+    window.toggleUniqueKeyInput = function() {
+      const stockUpdate = document.getElementById('bindStockUpdate');
+      const uniqueInput = document.getElementById('bindUniqueKeyColumn');
+      if (!stockUpdate || !uniqueInput) return;
+      uniqueInput.disabled = !stockUpdate.checked;
+      if (!stockUpdate.checked) uniqueInput.value = '';
     };
     window.openLibraryModal = function() { if (window.openModal) window.openModal('libraryMask'); };
   </script>
 </head>
 <body>
-  <!-- Modal Top for reliability -->
   <div id="libraryMask" class="modal-overlay">
     <div class="modal-content">
-      <div class="card-title"><span>MSSQL库路径配置</span><button onclick="closeModal('libraryMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button></div>
+      <div class="card-title">
+        <span>MSSQL 备份库路径配置</span>
+        <button onclick="closeModal('libraryMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button>
+      </div>
       <form method="post" action="/admin/mssql/library">
-        <div class="form-group"><label>备份文件根路径</label><input name="root_path" value="{{.rootPath}}" required /><p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">系统将扫描该目录下的 .sql 文件进行增量或全量同步。</p></div>
-        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;"><button type="button" class="btn" onclick="closeModal('libraryMask')">取消</button><button type="submit" class="btn btn-primary">应用保存</button></div>
+        <div class="form-group">
+          <label>备份文件根路径</label>
+          <input name="root_path" value="{{.rootPath}}" required />
+          <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">系统会递归扫描该目录下的 `.sql` 文件，并按配置执行导入。</p>
+        </div>
+        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" class="btn" onclick="closeModal('libraryMask')">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
       </form>
     </div>
   </div>
 
   <div id="bindMask" class="modal-overlay">
     <div class="modal-content">
-      <div class="card-title"><span>备份任务绑定</span><button onclick="closeModal('bindMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button></div>
+      <div class="card-title">
+        <span>MSSQL 表单绑定</span>
+        <button onclick="closeModal('bindMask')" style="background:none;border:none;cursor:pointer;font-size:2rem;color:var(--text-muted);line-height:1;">&times;</button>
+      </div>
       <form method="post" id="bindForm">
         <div class="grid-cols-2">
-          <div class="form-group"><label>业务显示名称</label><input name="display_name" id="bindName" required /></div>
-          <div class="form-group"><label>业务分组</label><input name="group_name" id="bindGroup" /></div>
-          <div class="form-group"><label>同步方式</label><select name="sync_method" id="bindMethod" onchange="toggleIntervalInput(this)"><option value="MANUAL">手动触发</option><option value="AUTO">自动定时</option></select></div>
-          <div class="form-group"><label>同步周期 (分钟)</label><input type="number" name="sync_interval_minutes" id="bindInterval" value="60" min="1" disabled /><p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">仅在自动定时模式下生效</p></div>
-          <div class="form-group col-span-full"><label>数据备注 (AI 语义理解)</label><textarea name="chinese_remark" id="bindRemark" rows="2"></textarea></div>
+          <div class="form-group">
+            <label>业务显示名称</label>
+            <input name="display_name" id="bindName" required />
+          </div>
+          <div class="form-group">
+            <label>业务分组</label>
+            <input name="group_name" id="bindGroup" />
+          </div>
+          <div class="form-group">
+            <label>同步方式</label>
+            <select name="sync_method" id="bindMethod" onchange="toggleIntervalInput(this)">
+              <option value="MANUAL">手动触发</option>
+              <option value="AUTO">自动定时</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>同步周期（分钟）</label>
+            <input type="number" name="sync_interval_minutes" id="bindInterval" value="60" min="1" disabled />
+            <p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">仅在自动定时模式下生效。</p>
+          </div>
+          <div class="form-group">
+            <label style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" name="stock_update_enabled" id="bindStockUpdate" onchange="toggleUniqueKeyInput()" style="width:auto;" />
+              存量更新
+            </label>
+            <p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">启用后，如果唯一字段重复，后导入的数据会覆盖原有数据。</p>
+          </div>
+          <div class="form-group">
+            <label>唯一字段配置</label>
+            <input name="unique_key_column" id="bindUniqueKeyColumn" placeholder="例如：id / order_no / bill_code" disabled />
+            <p style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">仅在启用存量更新后生效，填写 SQL 文件中的实际字段名。</p>
+          </div>
+          <div class="form-group col-span-full">
+            <label>数据备注（AI 语义说明）</label>
+            <textarea name="chinese_remark" id="bindRemark" rows="2"></textarea>
+          </div>
         </div>
-        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;"><button type="button" class="btn" onclick="closeModal('bindMask')">取消</button><button type="submit" class="btn btn-primary">保存配置</button></div>
+        <div style="margin-top:24px; display:flex; justify-content:flex-end; gap:12px;">
+          <button type="button" class="btn" onclick="closeModal('bindMask')">取消</button>
+          <button type="submit" class="btn btn-primary">保存配置</button>
+        </div>
       </form>
     </div>
   </div>
@@ -70,14 +129,14 @@
     <main class="main-content">
       <div class="card" style="margin-bottom: 24px;">
         <div class="card-title">
-          <span>MSSQL备份库管理</span>
+          <span>MSSQL 备份库管理</span>
           <div style="display:flex;gap:8px;">
             <button class="btn" onclick="openLibraryModal()">路径配置</button>
             <form method="post" action="/admin/mssql/discover"><button class="btn btn-primary" type="submit">扫描新表单</button></form>
           </div>
         </div>
         <div style="font-size:0.8125rem; color:var(--text-muted); margin-top:-8px;">
-          路径: <code>{{if .rootPath}}{{.rootPath}}{{else}}暂未配置{{end}}</code> | 最后扫描: {{.libraryAt}}
+          路径: <code>{{if .rootPath}}{{.rootPath}}{{else}}暂未配置{{end}}</code> | 最近查看: {{.libraryAt}}
         </div>
       </div>
 
@@ -104,7 +163,7 @@
         </summary>
         <div class="table-container">
           <table>
-            <thead><tr><th>SchemaCode</th><th>原始表名</th><th>业务名称</th><th>同步方式</th><th>记录数</th><th>上一次同步</th><th>操作</th></tr></thead>
+            <thead><tr><th>SchemaCode</th><th>原始表名</th><th>业务名称</th><th>同步方式</th><th>存量更新</th><th>记录数</th><th>上次同步</th><th>操作</th></tr></thead>
             <tbody>
               {{range .Forms}}
               <tr>
@@ -113,16 +172,29 @@
                 <td><strong>{{.DisplayName}}</strong></td>
                 <td>
                   <span class="badge {{if eq .SyncMethod "AUTO"}}badge-success{{else}}badge-info{{end}}">{{.SyncMethodLabel}}</span>
-                  {{if eq .SyncMethod "AUTO"}}<span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">{{.SyncIntervalMinutes}}分钟/次</span>{{end}}
+                  {{if eq .SyncMethod "AUTO"}}<span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">{{.SyncIntervalMinutes}} 分钟/次</span>{{end}}
+                </td>
+                <td>
+                  {{if .StockUpdateEnabled}}
+                  <span class="badge badge-success">已启用</span>
+                  <span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-top:2px;">{{.UniqueKeyColumn}}</span>
+                  {{else}}
+                  <span class="badge badge-info">关闭</span>
+                  {{end}}
                 </td>
                 <td>{{.DataCount}}</td>
                 <td style="font-size:0.75rem;">{{.LastSyncLabel}}</td>
                 <td>
                   <div class="action-icon-group">
-                    <button class="btn-icon" onclick="openBindModal(this)" data-schema="{{.SchemaCode}}" data-name="{{.DisplayName}}" data-group="{{.GroupName}}" data-remark="{{.ChineseRemark}}" data-method="{{.SyncMethod}}" data-interval="{{.SyncIntervalMinutes}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg></button>
+                    <button class="btn-icon" onclick="openBindModal(this)" data-schema="{{.SchemaCode}}" data-name="{{.DisplayName}}" data-group="{{.GroupName}}" data-remark="{{.ChineseRemark}}" data-method="{{.SyncMethod}}" data-interval="{{.SyncIntervalMinutes}}" data-stockupdate="{{.StockUpdateEnabled}}" data-uniquekey="{{.UniqueKeyColumn}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg></button>
                     <a href="/admin/mssql/forms/{{.SchemaCode}}/data" class="btn-icon" title="查看数据"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/></svg></a>
                     <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/sync"><button class="btn-icon" type="submit" title="手动同步"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button></form>
-                    <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/delete" onsubmit="return confirm('警告：永久删除该 MSSQL 表单配置及所有已同步的数据。\n\n操作不可逆，确定删除？');"><button class="btn-icon danger" type="submit" title="删除表单"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
+                    <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/full-sync" onsubmit="return confirm('全量更新会先清空当前表单已同步数据，再仅按当天目录下的 FULL 文件重建数据。确认继续？');">
+                      <button class="btn-icon {{if not .HasTodayFull}}danger{{end}}" type="submit" title="{{if .HasTodayFull}}全量更新{{else}}当天没有FULL文件，不能全量更新{{end}}" {{if not .HasTodayFull}}disabled{{end}}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M12 3v18"/><path d="M5 5l14 14"/></svg>
+                      </button>
+                    </form>
+                    <form method="post" action="/admin/mssql/forms/{{.SchemaCode}}/delete" onsubmit="return confirm('警告：会永久删除该 MSSQL 表单配置及已同步数据。确定删除吗？');"><button class="btn-icon danger" type="submit" title="删除表单"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button></form>
                   </div>
                 </td>
               </tr>
@@ -149,7 +221,7 @@
                 <td><strong>{{.DisplayName}}</strong></td>
                 <td>{{.TriggerLabel}}</td>
                 <td><span class="badge {{if eq .Status "SUCCESS"}}badge-success{{else if eq .Status "RUNNING"}}badge-info{{else}}badge-error{{end}}">{{.StatusLabel}}</span></td>
-                <td style="font-size:0.75rem;">{{.StartedLabel}} → {{.FinishedLabel}}</td>
+                <td style="font-size:0.75rem;">{{.StartedLabel}} -> {{.FinishedLabel}}</td>
                 <td><span class="badge badge-info">{{.SyncedCount}}</span></td>
                 <td style="font-size:0.75rem; color:var(--text-muted); max-width:200px; text-overflow:ellipsis; overflow:hidden;">{{.ErrorMessage}}</td>
               </tr>

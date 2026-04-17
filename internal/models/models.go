@@ -29,6 +29,8 @@ type MSSQLFormRegistry struct {
 	SourceTable       string     `db:"source_table"`
 	SourceFullName    string     `db:"source_full_name"`
 	IncrementalColumn string     `db:"incremental_column"`
+	StockUpdateEnabled bool      `db:"stock_update_enabled"`
+	UniqueKeyColumn    string    `db:"unique_key_column"`
 	LastProcessedFile *string    `db:"last_processed_file"`
 	LastProcessedAt   *time.Time `db:"last_processed_at"`
 	LastScannedAt     *time.Time `db:"last_scanned_at"`
@@ -47,6 +49,8 @@ type MSSQLFormListView struct {
 	SourceTable         string     `db:"source_table"`
 	SourceFullName      string     `db:"source_full_name"`
 	IncrementalColumn   string     `db:"incremental_column"`
+	StockUpdateEnabled  bool       `db:"stock_update_enabled"`
+	UniqueKeyColumn     string     `db:"unique_key_column"`
 	LastProcessedFile   *string    `db:"last_processed_file"`
 	LastProcessedAt     *time.Time `db:"last_processed_at"`
 	LastScannedAt       *time.Time `db:"last_scanned_at"`

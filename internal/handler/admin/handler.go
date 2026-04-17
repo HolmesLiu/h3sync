@@ -68,6 +68,7 @@ type mssqlFormRowView struct {
 	LastSyncLabel   string
 	NextSyncLabel   string
 	DataCount       int
+	HasTodayFull    bool
 }
 
 type sortFieldOption struct {
@@ -105,6 +106,7 @@ func RegisterRoutes(r *gin.Engine, h Handlers) {
 	admin.POST("/mssql/discover", h.discoverMSSQLForms)
 	admin.POST("/mssql/forms/:schema/bind", h.bindMSSQLForm)
 	admin.POST("/mssql/forms/:schema/sync", h.manualSyncMSSQL)
+	admin.POST("/mssql/forms/:schema/full-sync", h.fullSyncMSSQL)
 	admin.POST("/mssql/forms/:schema/delete", h.deleteMSSQLForm)
 	admin.GET("/mssql/forms/:schema/data", h.formDataPage)
 	admin.GET("/mssql/forms/:schema/export", h.exportFormDataCSV)
@@ -409,6 +411,10 @@ func (h Handlers) mssqlFormsPage(c *gin.Context) {
 		if err != nil {
 			cnt = 0
 		}
+		hasTodayFull := false
+		if h.MSSQLBackupService != nil {
+			hasTodayFull, _ = h.MSSQLBackupService.HasTodayFullFile(f.SchemaCode)
+		}
 		dataCount[f.SchemaCode] = cnt
 		fr := models.FormRegistry{
 			SchemaCode:          f.SchemaCode,
@@ -423,6 +429,7 @@ func (h Handlers) mssqlFormsPage(c *gin.Context) {
 			LastSyncLabel:     formatMinute(f.LastSyncAt),
 			NextSyncLabel:     nextSyncLabel(fr),
 			DataCount:         cnt,
+			HasTodayFull:      hasTodayFull,
 		})
 	}
 
@@ -545,11 +552,20 @@ func (h Handlers) bindMSSQLForm(c *gin.Context) {
 	displayName := strings.TrimSpace(c.PostForm("display_name"))
 	remark := strings.TrimSpace(c.PostForm("chinese_remark"))
 	groupName := strings.TrimSpace(c.PostForm("group_name"))
+	stockUpdateEnabled := c.PostForm("stock_update_enabled") == "on"
+	uniqueKeyColumn := strings.TrimSpace(c.PostForm("unique_key_column"))
 	if groupName == "" {
 		groupName = "MSSQL默认分组"
 	}
 
 	// NOTE: 读取同步策略配置，让已有的 Poller 自动拾取 MSSQL 表单
+	if !stockUpdateEnabled {
+		uniqueKeyColumn = ""
+	}
+	if stockUpdateEnabled && uniqueKeyColumn == "" {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=启用存量更新时必须配置唯一字段")
+		return
+	}
 	syncMethod := strings.ToUpper(strings.TrimSpace(c.PostForm("sync_method")))
 	if syncMethod != "AUTO" {
 		syncMethod = "MANUAL"
@@ -579,7 +595,11 @@ func (h Handlers) bindMSSQLForm(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=保存失败")
 		return
 	}
-	h.audit(c, "MSSQL_FORM_BIND", "form", schema, fmt.Sprintf("update mssql form: method=%s interval=%d", syncMethod, interval))
+	if err := h.FormRepo.UpdateMSSQLRowMergeConfig(form.ID, stockUpdateEnabled, uniqueKeyColumn); err != nil {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=保存存量更新配置失败")
+		return
+	}
+	h.audit(c, "MSSQL_FORM_BIND", "form", schema, fmt.Sprintf("update mssql form: method=%s interval=%d stock_update=%v unique_key=%s", syncMethod, interval, stockUpdateEnabled, uniqueKeyColumn))
 	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=配置已保存")
 }
 
@@ -594,6 +614,34 @@ func (h Handlers) manualSyncMSSQL(c *gin.Context) {
 	}
 	h.audit(c, "MSSQL_FORM_SYNC_MANUAL", "form", schema, "trigger manual sync")
 	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=手动同步已触发")
+}
+
+func (h Handlers) fullSyncMSSQL(c *gin.Context) {
+	schema := c.Param("schema")
+	if h.MSSQLBackupService == nil {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=MSSQL服务未启用")
+		return
+	}
+	hasTodayFull, err := h.MSSQLBackupService.HasTodayFullFile(schema)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=检查FULL文件失败")
+		return
+	}
+	if !hasTodayFull {
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=当天目录下没有该表单的FULL文件，不能执行全量更新")
+		return
+	}
+
+	runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	count, err := h.MSSQLBackupService.FullSyncToday(runCtx, schema)
+	if err != nil {
+		h.Logger.Error("full mssql sync failed", zap.String("schema", schema), zap.Error(err))
+		c.Redirect(http.StatusFound, "/admin/mssql/forms?msg=全量更新失败，请查看日志")
+		return
+	}
+	h.audit(c, "MSSQL_FORM_SYNC_FULL", "form", schema, fmt.Sprintf("trigger full sync rows=%d", count))
+	c.Redirect(http.StatusFound, "/admin/mssql/forms?msg="+fmt.Sprintf("全量更新完成，同步 %d 行", count))
 }
 
 func (h Handlers) deleteMSSQLForm(c *gin.Context) {

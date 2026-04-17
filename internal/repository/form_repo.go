@@ -289,6 +289,19 @@ func (r *FormRepo) CountBizRowsSafe(schemaCode string) (int, error) {
 	return total, nil
 }
 
+func (r *FormRepo) ClearBizRows(schemaCode string) error {
+	tbl := BizTableName(schemaCode)
+	var regClass sql.NullString
+	if err := r.db.Get(&regClass, `SELECT to_regclass($1)`, "public."+tbl); err != nil {
+		return err
+	}
+	if !regClass.Valid || regClass.String == "" {
+		return nil
+	}
+	_, err := r.db.Exec(fmt.Sprintf("TRUNCATE TABLE %s", tbl))
+	return err
+}
+
 func (r *FormRepo) ListBizColumns(schemaCode string) ([]string, error) {
 	tbl := BizTableName(schemaCode)
 	var cols []string
@@ -739,6 +752,17 @@ func (r *FormRepo) UpsertMSSQLMeta(formID int64, sourceSchema, sourceTable, full
 	return err
 }
 
+func (r *FormRepo) UpdateMSSQLRowMergeConfig(formID int64, enabled bool, uniqueKeyColumn string) error {
+	_, err := r.db.Exec(`
+	UPDATE mssql_form_registry
+	SET stock_update_enabled=$2,
+	    unique_key_column=$3,
+	    updated_at=now()
+	WHERE form_id=$1
+	`, formID, enabled, strings.TrimSpace(strings.ToLower(uniqueKeyColumn)))
+	return err
+}
+
 func (r *FormRepo) TouchMSSQLScannedAt(formID int64) error {
 	_, err := r.db.Exec(`UPDATE mssql_form_registry SET last_scanned_at=now(), updated_at=now() WHERE form_id=$1`, formID)
 	return err
@@ -782,7 +806,7 @@ func (r *FormRepo) ListMSSQLForms() ([]models.MSSQLFormListView, error) {
 	var rows []models.MSSQLFormListView
 	err := r.db.Select(&rows, `
 	SELECT fr.id AS form_id, fr.schema_code, fr.group_name, fr.display_name, fr.chinese_remark, fr.sync_method, fr.sync_interval_minutes, fr.last_sync_at,
-	       mr.source_schema, mr.source_table, mr.source_full_name, mr.incremental_column, mr.last_processed_file, mr.last_processed_at, mr.last_scanned_at
+	       mr.source_schema, mr.source_table, mr.source_full_name, mr.incremental_column, mr.stock_update_enabled, mr.unique_key_column, mr.last_processed_file, mr.last_processed_at, mr.last_scanned_at
 	FROM form_registry fr
 	JOIN mssql_form_registry mr ON mr.form_id = fr.id
 	WHERE fr.source_type='MSSQL_BACKUP'
@@ -794,7 +818,7 @@ func (r *FormRepo) ListMSSQLForms() ([]models.MSSQLFormListView, error) {
 func (r *FormRepo) GetMSSQLMetaBySchema(schemaCode string) (models.MSSQLFormRegistry, error) {
 	var row models.MSSQLFormRegistry
 	err := r.db.Get(&row, `
-	SELECT mr.form_id, mr.source_schema, mr.source_table, mr.source_full_name, mr.incremental_column,
+	SELECT mr.form_id, mr.source_schema, mr.source_table, mr.source_full_name, mr.incremental_column, mr.stock_update_enabled, mr.unique_key_column,
 	       mr.last_processed_file, mr.last_processed_at, mr.last_scanned_at
 	FROM mssql_form_registry mr
 	JOIN form_registry fr ON fr.id = mr.form_id
