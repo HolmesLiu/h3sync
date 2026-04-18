@@ -297,6 +297,7 @@
 {
   "limit": 100,
   "offset": 0,
+  "cursor": "",
   "filters": [
     { "field": "sample_no", "operator": "eq", "value": "S20260301001" },
     { "field": "customer_name", "operator": "contains", "value": "瑞普" }
@@ -306,10 +307,15 @@
 
 字段说明：
 - `limit`：单次返回条数，`1-500`，超限会回落默认值。
-- `offset`：偏移量，用于分页。
+- `offset`：偏移量，用于兼容旧版分页。
+- `cursor`：游标分页标记。传了 `cursor` 后会优先走游标分页，忽略 `offset`。
 - `filters`：过滤条件数组，多个条件为 `AND` 关系。
 - `operator` 目前支持：
 - `eq`：等于
+- `gt`：大于
+- `gte`：大于等于
+- `lt`：小于
+- `lte`：小于等于
 - `contains`：模糊匹配（ILIKE）
 
 注意：
@@ -342,14 +348,22 @@
         "customer_name": "郑州瑞普生物工程有限公司"
       }
     }
-  ]
+  ],
+  "pagination": {
+    "limit": 100,
+    "offset": 0,
+    "cursor": "",
+    "hasMore": true,
+    "nextCursor": "eyJtb2RpZmllZFRpbWUiOiIyMDI2LTA0LTAxVDA4OjEyOjAwWiIsIm9iamVjdElkIjoiMTIzNDU2In0"
+  }
 }
 ```
 
 语义说明：
 - `form`：表单元信息，含中文备注，便于 AI 理解业务上下文。
 - `fieldRemarks`：字段备注清单，便于 AI 做字段语义映射。
-- `rows`：查询结果，默认按 `modified_time DESC, object_id DESC`。
+- `rows`：查询结果，默认按 `modified_time DESC` 排序；当 `object_id` 为纯数字时会按数值大小排序，避免 `99999` 排在 `100000` 前面。
+- `pagination.nextCursor`：下一页游标；为空时表示当前结果已经翻完。
 
 ## 5. 查询示例
 
@@ -383,6 +397,34 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
   }'
 ```
 
+### 5.3 游标分页
+
+```bash
+curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: hk_xxxxxxxxxxxxxxxxx" \
+  -d '{
+    "limit": 100,
+    "cursor": "<上一次返回的 nextCursor>",
+    "filters": []
+  }'
+```
+
+### 5.4 按大 ID 增量读取
+
+```bash
+curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: hk_xxxxxxxxxxxxxxxxx" \
+  -d '{
+    "limit": 100,
+    "offset": 0,
+    "filters": [
+      {"field":"object_id","operator":"gt","value":"99999"}
+    ]
+  }'
+```
+
 ## 6. AI 调用建议（记忆规则）
 
 建议 AI 在会话中遵循以下规则：
@@ -390,8 +432,8 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
 1. 开场必须先调用 `GET http://{{.host}}/openapi/forms` 获取授权表单列表与其备注。绝对不要凭空猜测 `schema`。
 2. 获取到列表后，利用返回的 `chineseRemark` 理解各个表单的作用，再向 `POST /openapi/query/{schema}` 发起具体数据查询。
 3. 阅读 `POST` 接口返回的 `fieldRemarks` 熟悉字段结构。
-4. 优先使用 `eq` 精确条件过滤数据，必要时再用 `contains`。
-5. 单次请求 `limit` 不超过 `200`，超大数据集注意利用 `offset` 分页读取。
+4. 优先使用 `eq` 精确条件过滤数据；按 ID 区间读取时可使用 `gt/gte/lt/lte`，必要时再用 `contains`。
+5. 超大数据集优先使用游标分页，直接复用返回里的 `pagination.nextCursor`；`offset` 仅建议兼容旧调用时使用。
 6. 需要获取复杂的原生 JSON 树状结构时，优先读取 `rows[].raw_json`。
 7. 遇到 `403` 不重试同参数，说明 Key 权限没包含该表单，应明确告知用户权限受限。
 
@@ -399,7 +441,7 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
 
 - 报 `missing X-API-Key`：检查请求头是否携带。
 - 报 `forbidden`：检查 key 是否过期、停用、无该表单权限。
-- 报 `unsupported operator`：仅支持 `eq`、`contains`。
+- 报 `unsupported operator`：仅支持 `eq`、`gt`、`gte`、`lt`、`lte`、`contains`。
 - 查询为空：先去后台确认该表单已同步且有数据，再核对 `schema` 是否写对。
 
 ## 8. 推荐给 AI 的最小调用模板
@@ -427,7 +469,7 @@ curl -X POST "http://{{.host}}/openapi/query/tb_premix_send_detail" \
       },
       "body": {
         "limit": 100,
-        "offset": 0,
+        "cursor": "",
         "filters": []
       }
     }

@@ -336,7 +336,7 @@ func (r *FormRepo) ListBizRowsForAdmin(schemaCode string, columns []string, keyw
 	tbl := BizTableName(schemaCode)
 	selectCols := []string{"object_id", "modified_time"}
 	allowedSort := map[string]string{
-		"object_id":     quoteIdentifier("object_id"),
+		"object_id":     objectIDSortExpr("ASC"),
 		"modified_time": quoteIdentifier("modified_time"),
 	}
 	for _, c := range columns {
@@ -361,7 +361,11 @@ func (r *FormRepo) ListBizRowsForAdmin(schemaCode string, columns []string, keyw
 	if strings.EqualFold(strings.TrimSpace(sortOrder), "ASC") {
 		dir = "ASC"
 	}
-	q += fmt.Sprintf(" ORDER BY %s %s NULLS LAST, %s DESC", sortCol, dir, quoteIdentifier("object_id"))
+	if strings.EqualFold(strings.TrimSpace(sortField), "object_id") {
+		q += " ORDER BY " + objectIDSortExpr(dir)
+	} else {
+		q += fmt.Sprintf(" ORDER BY %s %s NULLS LAST, %s", sortCol, dir, objectIDSortExpr("DESC"))
+	}
 	q += " LIMIT $" + fmt.Sprintf("%d", len(args)+1)
 	q += " OFFSET $" + fmt.Sprintf("%d", len(args)+2)
 	args = append(args, limit, offset)
@@ -528,8 +532,43 @@ func (r *FormRepo) QueryRows(schemaCode string, whereSQL string, args []interfac
 	if whereSQL != "" {
 		q += " WHERE " + whereSQL
 	}
-	q += " ORDER BY modified_time DESC NULLS LAST, object_id DESC LIMIT $" + fmt.Sprintf("%d", len(args)+1) + " OFFSET $" + fmt.Sprintf("%d", len(args)+2)
+	q += " ORDER BY modified_time DESC NULLS LAST, " + objectIDSortExpr("DESC") + " LIMIT $" + fmt.Sprintf("%d", len(args)+1) + " OFFSET $" + fmt.Sprintf("%d", len(args)+2)
 	args = append(args, limit, offset)
+
+	rows, err := r.db.Queryx(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		m := map[string]interface{}{}
+		if err := rows.MapScan(m); err != nil {
+			return nil, err
+		}
+		result = append(result, normalizeMapScan(m))
+	}
+	return result, nil
+}
+
+func (r *FormRepo) QueryRowsByCursor(schemaCode string, whereSQL string, args []interface{}, limit int, cursorModified *time.Time, cursorObjectID string) ([]map[string]interface{}, error) {
+	tbl := BizTableName(schemaCode)
+	q := fmt.Sprintf("SELECT object_id, modified_time, raw_json FROM %s", tbl)
+	clauses := make([]string, 0, 2)
+	if strings.TrimSpace(whereSQL) != "" {
+		clauses = append(clauses, whereSQL)
+	}
+	cursorClause, cursorArgs := buildQueryCursorCondition(len(args)+1, cursorModified, cursorObjectID)
+	if cursorClause != "" {
+		clauses = append(clauses, cursorClause)
+		args = append(args, cursorArgs...)
+	}
+	if len(clauses) > 0 {
+		q += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	q += " ORDER BY modified_time DESC NULLS LAST, " + objectIDSortExpr("DESC") + " LIMIT $" + fmt.Sprintf("%d", len(args)+1)
+	args = append(args, limit)
 
 	rows, err := r.db.Queryx(q, args...)
 	if err != nil {
@@ -870,6 +909,34 @@ func normalizeMapScan(m map[string]interface{}) map[string]interface{} {
 
 func BizTableName(schemaCode string) string {
 	return `biz_` + strings.ToLower(schemaCode)
+}
+
+func objectIDSortExpr(dir string) string {
+	direction := "DESC"
+	if strings.EqualFold(strings.TrimSpace(dir), "ASC") {
+		direction = "ASC"
+	}
+	// Pure numeric object_id values are sorted by numeric value first so 100000 comes after 99999.
+	return fmt.Sprintf("CASE WHEN object_id ~ '^[0-9]+$' THEN object_id::numeric END %s NULLS LAST, object_id %s", direction, direction)
+}
+
+func buildQueryCursorCondition(argStart int, cursorModified *time.Time, cursorObjectID string) (string, []interface{}) {
+	objectIDExpr := objectIDAfterCursorDescExpr("object_id", argStart+1)
+	if cursorModified == nil {
+		return fmt.Sprintf("(modified_time IS NULL AND %s)", objectIDExpr), []interface{}{strings.TrimSpace(cursorObjectID)}
+	}
+	return fmt.Sprintf("((modified_time IS NULL) OR modified_time < $%d OR (modified_time = $%d AND %s))", argStart, argStart, objectIDExpr), []interface{}{*cursorModified, strings.TrimSpace(cursorObjectID)}
+}
+
+func objectIDAfterCursorDescExpr(column string, argPos int) string {
+	arg := fmt.Sprintf("$%d", argPos)
+	return fmt.Sprintf(`(
+		((%[1]s ~ '^[0-9]+$') AND (%[2]s ~ '^[0-9]+$') AND %[1]s::numeric < %[2]s::numeric)
+		OR
+		(NOT (%[1]s ~ '^[0-9]+$') AND (%[2]s ~ '^[0-9]+$'))
+		OR
+		(NOT (%[1]s ~ '^[0-9]+$') AND NOT (%[2]s ~ '^[0-9]+$') AND %[1]s < %[2]s)
+	)`, column, arg)
 }
 
 func isSafeIdentifier(v string) bool {
